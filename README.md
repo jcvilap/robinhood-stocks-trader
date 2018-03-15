@@ -1,4 +1,4 @@
-# Stocks Day-Trader
+# Stock Day Trader
 [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/jcvilap/stocks-day-trader)
 
 ## Milestones
