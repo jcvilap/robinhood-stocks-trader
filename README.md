@@ -30,7 +30,7 @@
 
 ## Docs
 ### 3rd Party APIs
-- Stocks feed: [IEX Trading](https://iextrading.com/developer/)
+-- Stocks feed: [IEX Trading](https://iextrading.com/developer/)
 -- Stocks order management: [Robinhood's Private API](https://api.robinhood.com/)	+- Stocks order management(in the near future...): [Robinhood's Private API](https://api.robinhood.com/)
 
 ### Rules
