@@ -30,7 +30,8 @@
 
 ## Docs
 ### 3rd Party APIs
-- Crypto-currencies exchange feeds and order management: [GDAX Websocket Client](https://github.com/coinbase/gdax-node#websocket-client)
+- Stocks feed: [IEX Trading](https://iextrading.com/developer/)
+-- Stocks order management: [Robinhood's Private API](https://api.robinhood.com/)	+- Stocks order management(in the near future...): [Robinhood's Private API](https://api.robinhood.com/)
 
 ### Rules
 I define a `Rule` as a single instance of multiple trading strategies to be used by the `Engine`. Rules can be defined by the user and will be stored in the Mongo instance
