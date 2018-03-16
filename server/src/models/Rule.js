@@ -3,19 +3,27 @@ const Utils = require('../utils');
 
 const Rule = new mongoose.Schema({
   /**
-   * Product id
-   * @example 'BTC-USD'
+   * Stock symbol
+   * @example 'FB'
    */
-  product_id: String,
+  symbol: String,
   /**
-   * Price per bitcoin in USD
+   * Stock instrument id. This value is specially useful when mapping the position to the symbol
+   */
+  instrumentId: String,
+  /**
+   * Price per share
    */
   price: Number,
   /**
-   * Amount of bitcoin bought or sold
+   * Number of shares bought or sold
    * @readonly
    */
   size: {type: Number, default: 0},
+  /**
+   * Time of the last stock price change
+   */
+  time: Number,
   /**
    * Current status of the rule. Possible values:
    *  idle - the Rule is turned off by user
@@ -25,35 +33,38 @@ const Rule = new mongoose.Schema({
    */
   status: {type: String, default: 'idle'},
   /**
+   * Flag indicating if trading is halted on the stock
+   */
+  tradingHalted: Boolean,
+  /**
    * Percentage that this rule represents of the entire account funds
    * @example 100%
    */
   portfolioDiversity: {type: Number, default: 100},
   /**
-   * Highest value the rule had held since it was bought. This will drive the stop loss price
+   * Highest stock price since the last transaction
    */
   high: {type: Number, default: 0},
   /**
-   * Price per bitcoin that, if reached, will trigger a limit SELL
+   * Price per share that, if reached, will trigger a SELL
    * Only triggers a SELL if status is 'bought'
    * @example 1%
    */
   stopLossPerc: {type: Number, default: .1},
   stopLossPrice: Number,
   /**
-   * Lowest value the rule had held since it was sold. This will drive the limit sell price
+   * Lowest stock price since the last transaction
    */
   low: {type: Number, default: 0},
   /**
-   * Price per bitcoin that, if reached, will trigger a limit BUY
+   * Price per share that, if reached, will trigger a BUY
    * Only triggers a BUY if status is 'sold'
    * @example 1%
    */
   limitPerc: {type: Number, default: .05},
   limitPrice: Number,
   /**
-   * Price per bitcoin that, if reached, will trigger a market SELL and will put the rule on 'idle' state
-   * TODO: handle risk logic
+   * Price per share that, if reached, will trigger a market SELL and will put the rule on 'idle' state
    */
   riskPerc: {type: Number, default: 10},
   riskPrice: Number,

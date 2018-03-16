@@ -8,14 +8,16 @@
 - [ ] Deploy Client app to Surge.sh and point server calls to server's APIs
 
 #### Server
-- [x] Connect to IEX API to access market data using their WebSockets API 
+- [x] Connect to market data using API 
 - [ ] Listen to changes on the market
 - [ ] Define `Rule` class
 - [ ] Instantiate initial `Rule` objects with default limits and persist data on Mongo
 - [ ] Fetch user `rules` from database on load
-- [ ] Fetch user accounts using the Robinhood Private API
-- [ ] Fetch pending orders using the Robinhood Private API
+- [x] Fetch user account using the Robinhood Private API
+- [x] Fetch user portfolio using the Robinhood Private API
+- [x] Fetch user positions using the Robinhood Private API
 - [ ] Fetch instruments using the Robinhood Private API
+- [ ] Fetch pending orders using the Robinhood Private API
 - [ ] Identify either by polling or other mechanism when a limit order is placed
 - [ ] Enable Buy/Sell/Stop/Limit actions using the Robinhood Private API
 - [ ] Watch for stock changes based on `rules`

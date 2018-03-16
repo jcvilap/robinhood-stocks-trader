@@ -27,7 +27,8 @@ class App {
   start() {
     this.server.listen(PORT, () => {
       console.log('Listening to port:', PORT);
-    })
+      this.engine.start();
+    });
   }
 
   handleExit() {
