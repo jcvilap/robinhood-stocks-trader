@@ -3,6 +3,10 @@ const Utils = require('../utils');
 
 const Rule = new mongoose.Schema({
   /**
+   * User's account number
+   */
+  accountNumber: String,
+  /**
    * Stock symbol
    * @example 'FB'
    */

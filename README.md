@@ -8,6 +8,7 @@
 - [ ] Deploy Client app to Surge.sh and point server calls to server's APIs
 
 #### Server
+- [x] Handle user auth
 - [x] Connect to market data using API 
 - [ ] Listen to changes on the market
 - [ ] Define `Rule` class
