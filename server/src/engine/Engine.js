@@ -54,16 +54,29 @@ class Engine {
   /**
    * Main algorithm that makes desicions based on the rules
    */
-  applyRules() {
+  async applyRules() {
     if (this.status === 'idle') {
       return clearInterval(this.poll);
     }
 
-    this.rules.forEach(rule => {
+    try {
+      const quotes = await rh.getQuotes(this.rules.map(r => r.symbol));
+      this.rules.forEach(rule => {
+        const position = this.positions.find(p => p.instrument.includes(rule.instrumentId));
+        const quote = quotes.find(q => q.symbol === rule.symbol);
+        const numberOfShares = Number(position.quantity);
+        // Rule active
+        if (numberOfShares > 0) {
 
-      // logic here
+        }
+        // Rule inactive
+        else {
 
-    });
+        }
+      });
+    } catch (e) {
+      console.error(error);
+    }
   }
 }
 

@@ -31,8 +31,8 @@ const Rule = new mongoose.Schema({
   /**
    * Current status of the rule. Possible values:
    *  idle - the Rule is turned off by user
-   *  bought - result of a BUY
-   *  sold - result of a SELL
+   *  active - result of a BUY
+   *  inactive - result of a SELL
    *  pending - pending BUY or SELL transaction
    */
   status: {type: String, default: 'idle'},

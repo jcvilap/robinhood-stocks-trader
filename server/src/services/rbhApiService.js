@@ -14,9 +14,10 @@ class RHService {
   getQuotes(...symbols) {
     const options = {
       ...common,
-      uri: `${RBH_API_BASE}/quotes?symbols=${symbols}`
+      uri: `${RBH_API_BASE}/quotes/?symbols=${symbols}`
     };
-    return request(options);
+    return request(options)
+      .then(({results}) => results);
   }
 
   getInstrumentBySymbol(symbol) {
