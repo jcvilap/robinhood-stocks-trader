@@ -6,6 +6,7 @@ class Engine {
   constructor() {
     this.account = null;
     this.positions = null;
+    this.limitOrders = null;
     this.rules = null;
     this.poll = null;
 
@@ -39,6 +40,7 @@ class Engine {
           accountNumber: this.account.account_number,
           symbol: 'NFLX',
           instrumentId: '81733743-965a-4d93-b87a-6973cb9efd34',
+          instrumentUrl: 'https://api.robinhood.com/instruments/81733743-965a-4d93-b87a-6973cb9efd34/'
         });
         this.rules = [await rule.save()];
       }
@@ -52,7 +54,8 @@ class Engine {
   }
 
   /**
-   * Main algorithm that makes desicions based on the rules
+   * Main algorithm that makes decisions based on the rules
+   * TODO: Fetch day trades before setting limits
    */
   async applyRules() {
     if (this.status === 'idle') {
@@ -60,21 +63,62 @@ class Engine {
     }
 
     try {
-      const quotes = await rh.getQuotes(this.rules.map(r => r.symbol));
-      this.rules.forEach(rule => {
-        const position = this.positions.find(p => p.instrument.includes(rule.instrumentId));
+      const [quotes, dayTradeCount, limitOrders] = Promise.all([
+        rh.getOrders(),
+        rh.getQuotes(this.rules.map(r => r.symbol)),
+        rh.getDayTradeCount(this.account.account_number),
+      ]);
+
+      this.rules.forEach(async (rule, index) => {
+        const position = this.positions.find(p => p.instrument === rule.instrumentUrl);
         const quote = quotes.find(q => q.symbol === rule.symbol);
-        const numberOfShares = Number(position.quantity);
-        // Rule active
-        if (numberOfShares > 0) {
+        const order = limitOrders.find(({id}) === rule.limitOrderId);
 
+        // Update rule
+        rule = validateRule(rule, quote, position);
+        if (rule.shouldUpdateLimitOrder) {
+          // Cancel previous order if found
+          if (order) {
+            const {state, cancel} = await rh.cancelOrder(order.id);
+            // If cancel is no null, post to this url to cancel the order
+            if (state !== 'cancelled' && cancel) {
+              await rh.postWithAuth(cancel);
+            }
+          }
+          // Check day trades
+          if (rule.quantity < 3) {
+            const orderOptions = {
+              account: this.account.url,
+              instrument: rule.instrumentUrl,
+              symbol: rule.symbol,
+              quantity: rule.quantity,
+              type: 'limit',
+              time_in_force: 'gtc',
+              trigger: 'stop',
+              extended_hours: true,
+              override_day_trade_checks: false,
+              override_dtbp_checks: false
+            };
+            // Rule active
+            if (rule.quantity > 0) {
+              options.price = rule.stopLossPrice;
+              options.stop_price = rule.stopLossPrice;
+              options.side = 'sell';
+            }
+            // Rule inactive
+            else {
+              options.price = rule.limitPrice;
+              options.stop_price = rule.limitPrice;
+              options.side = 'buy';
+            }
+          }
         }
-        // Rule inactive
-        else {
 
-        }
+        // Maintain order collection up to date
+        this.rules[index] = await rule.save();
       });
-    } catch (e) {
+    } catch (error) {
+      // For now just log the error. In the future we may want to try again reconnecting in 5 seconds or so
       console.error(error);
     }
   }

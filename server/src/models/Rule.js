@@ -12,18 +12,23 @@ const Rule = new mongoose.Schema({
    */
   symbol: String,
   /**
-   * Stock instrument id. This value is specially useful when mapping the position to the symbol
+   * Stock instrument id and URL. These values are is specially useful when mapping the position to the symbol
    */
   instrumentId: String,
+  instrumentUrl: String,
   /**
-   * Price per share
+   * Last stock price
    */
   price: Number,
   /**
-   * Number of shares bought or sold
+   * Number of shares bought
    * @readonly
    */
   size: {type: Number, default: 0},
+  /**
+   * Number of shares to buy or  sell
+   */
+  quantity: {type: Number, default: 0},
   /**
    * Time of the last stock price change
    */
@@ -51,7 +56,7 @@ const Rule = new mongoose.Schema({
   high: {type: Number, default: 0},
   /**
    * Price per share that, if reached, will trigger a SELL
-   * Only triggers a SELL if status is 'bought'
+   * Only triggers a SELL if status is 'active'
    * @example 1%
    */
   stopLossPerc: {type: Number, default: .1},
@@ -76,27 +81,50 @@ const Rule = new mongoose.Schema({
    * Order id of active BUY or SELL limit order
    */
   limitOrderId: String,
+  /**
+   * If true the last limit order will be cancelled, and a new limit order will be place based on the new price
+   */
+  shouldUpdateLimitOrder: Boolean,
 });
 
 /**
  * Calculates all the dynamic fields on the rule
  * @param rule
+ * @param quote
+ * @param position
  */
-const validateRule = (rule) => {
+const validateRule = (rule, quote = {}, position = {}) => {
+  // Set update limit order flag to false initially
+  rule.shouldUpdateLimitOrder = false;
+
+  // Update price from quote
+  if (quote.last_trade_price) {
+    rule.price = quote.last_trade_price;
+    rule.time = quote.updated_at;
+  }
+
+  if (position.quantity) {
+    rule.quantity = position.quantity;
+  } else {
+    // add logic to calculate amount of shares to buy based on available $$
+  }
+
   // Upwards movement
-  if (rule.status === 'bought' && (rule.high < rule.price || rule.high === 0)) {
+  if (rule.status === 'active' && (rule.high < rule.price || rule.high === 0)) {
     rule.high = rule.price;
     rule.riskPrice = rule.high - (rule.high * rule.riskPerc / 100);
     rule.stopLossPrice = rule.high - (rule.high * rule.stopLossPerc / 100);
     rule.riskPrice = Utils.precisionRound(rule.riskPrice, 2);
     rule.stopLossPrice = Utils.precisionRound(rule.stopLossPrice, 2);
+    rule.shouldUpdateLimitOrder = true;
   }
 
   // Downwards movement
-  if (rule.status === 'sold' && (rule.low > rule.price || rule.low === 0)) {
+  else if (rule.status === 'inactive' && (rule.low > rule.price || rule.low === 0)) {
     rule.low = rule.price;
     rule.limitPrice = rule.low + (rule.low * rule.limitPerc / 100);
     rule.limitPrice = Utils.precisionRound(rule.limitPrice, 2);
+    rule.shouldUpdateLimitOrder = true;
   }
 };
 

@@ -83,15 +83,35 @@ class RHService {
   getOrders() {
     const options = {
       ...this.commonPrivate,
-      uri: `${RBH_API_BASE}/orders?filter[state]=confirmed`
+      uri: `${RBH_API_BASE}/orders/?filter[state]=confirmed`
     };
     return request(options);
+  }
+
+  cancelOrder(id) {
+    return this.postWithAuth(`${RBH_API_BASE}/orders/${id}/cancel/`)
+      .then(({token}) => this.commonPrivate.headers.Authorization = `Token ${token}`);
   }
 
   getAccountResource(accountNumber, resource) {
     const options = {
       ...this.commonPrivate,
       uri: `${RBH_API_BASE}/accounts/${accountNumber}/${resource}/`
+    };
+    return request(options);
+  }
+
+  getDayTradeCount(accountNumber) {
+   return this.getAccountResource(accountNumber, 'recent_day_trades')
+     .then((recentDayTrades) => recentDayTrades.length);
+  }
+
+  postWithAuth(URL) {
+    const options = {
+      ...this.commonPrivate,
+      method: 'POST',
+      uri: URL,
+      form: RH_CREDENTIALS
     };
     return request(options);
   }
