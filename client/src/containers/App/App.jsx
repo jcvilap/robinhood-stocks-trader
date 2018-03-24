@@ -6,7 +6,7 @@ import PerfectScrollbar from "perfect-scrollbar";
 import "perfect-scrollbar/css/perfect-scrollbar.css";
 import { withStyles } from "material-ui";
 
-import { Header, Footer, Sidebar } from "components";
+import { Header, Sidebar } from "components";
 
 import appRoutes from "routes/app.jsx";
 
@@ -72,7 +72,6 @@ class App extends React.Component {
           ) : (
             <div className={classes.map}>{switchRoutes}</div>
           )}
-          {this.getRoute() ? <Footer /> : null}
         </div>
       </div>
     );

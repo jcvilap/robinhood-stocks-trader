@@ -1,20 +1,8 @@
 import DashboardPage from "views/Dashboard/Dashboard.jsx";
 import UserProfile from "views/UserProfile/UserProfile.jsx";
-import TableList from "views/TableList/TableList.jsx";
-import Typography from "views/Typography/Typography.jsx";
-import Icons from "views/Icons/Icons.jsx";
-import Maps from "views/Maps/Maps.jsx";
+import Rules from "views/Rules/Rules.jsx";
 import NotificationsPage from "views/Notifications/Notifications.jsx";
-
-import {
-  Dashboard,
-  Person,
-  ContentPaste,
-  LibraryBooks,
-  BubbleChart,
-  LocationOn,
-  Notifications
-} from "material-ui-icons";
+import {ContentPaste, Dashboard, Notifications, Person} from "material-ui-icons";
 
 const appRoutes = [
   {
@@ -32,32 +20,11 @@ const appRoutes = [
     component: UserProfile
   },
   {
-    path: "/table",
-    sidebarName: "Table List",
-    navbarName: "Table List",
+    path: "/rules",
+    sidebarName: "Rules",
+    navbarName: "All Rules",
     icon: ContentPaste,
-    component: TableList
-  },
-  {
-    path: "/typography",
-    sidebarName: "Typography",
-    navbarName: "Typography",
-    icon: LibraryBooks,
-    component: Typography
-  },
-  {
-    path: "/icons",
-    sidebarName: "Icons",
-    navbarName: "Icons",
-    icon: BubbleChart,
-    component: Icons
-  },
-  {
-    path: "/maps",
-    sidebarName: "Maps",
-    navbarName: "Map",
-    icon: LocationOn,
-    component: Maps
+    component: Rules
   },
   {
     path: "/notifications",
@@ -66,7 +33,7 @@ const appRoutes = [
     icon: Notifications,
     component: NotificationsPage
   },
-  { redirect: true, path: "/", to: "/dashboard", navbarName: "Redirect" }
+  {redirect: true, path: "/", to: "/rules", navbarName: "Redirect"}
 ];
 
 export default appRoutes;
