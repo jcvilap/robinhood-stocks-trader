@@ -54,8 +54,9 @@ class Engine {
   }
 
   /**
-   * Main algorithm that makes decisions based on the rules
-   * TODO: Fetch day trades before setting limits
+   * Main algorithm that updates limits based on the rules.
+   * For now and until the portfolio is below 25k, let's run
+   * only if there are no day-trades
    */
   async applyRules() {
     if (this.status === 'idle') {
@@ -69,54 +70,62 @@ class Engine {
         rh.getDayTradeCount(this.account.account_number),
       ]);
 
-      this.rules.forEach(async (rule, index) => {
-        const position = this.positions.find(p => p.instrument === rule.instrumentUrl);
-        const quote = quotes.find(q => q.symbol === rule.symbol);
-        const order = limitOrders.find(({id}) === rule.limitOrderId);
+      if (!dayTradeCount) {
+        this.rules.forEach(async (rule, index) => {
+          const position = this.positions.find(p => p.instrument === rule.instrumentUrl);
+          const quote = quotes.find(q => q.symbol === rule.symbol);
+          const order = limitOrders.find(({id}) === rule.limitOrderId);
 
-        // Update rule
-        rule = validateRule(rule, quote, position);
-        if (rule.shouldUpdateLimitOrder) {
-          // Cancel previous order if found
-          if (order) {
-            const {state, cancel} = await rh.cancelOrder(order.id);
-            // If cancel is no null, post to this url to cancel the order
-            if (state !== 'cancelled' && cancel) {
-              await rh.postWithAuth(cancel);
+          // Update rule
+          rule = validateRule(rule, quote, position);
+          if (rule.shouldUpdateLimitOrder) {
+            // Cancel previous order if found
+            if (order) {
+              const {state, cancel} = await rh.cancelOrder(order.id);
+              // If cancel is no null, post to this url to cancel the order
+              if (state !== 'cancelled' && cancel) {
+                await rh.postWithAuth(cancel);
+              }
+            }
+            // Check day trades
+            if (rule.quantity < 3) {
+              const orderOptions = {
+                account: this.account.url,
+                instrument: rule.instrumentUrl,
+                symbol: rule.symbol,
+                quantity: rule.quantity,
+                type: 'limit',
+                time_in_force: 'gtc',
+                trigger: 'stop',
+                extended_hours: true,
+                override_day_trade_checks: false,
+                override_dtbp_checks: false
+              };
+              // Rule active
+              if (rule.quantity > 0) {
+                options.price = rule.stopLossPrice;
+                options.stop_price = rule.stopLossPrice;
+                options.side = 'sell';
+              }
+              // Rule inactive
+              else {
+                options.price = rule.limitPrice;
+                options.stop_price = rule.limitPrice;
+                options.side = 'buy';
+              }
+              // Post new order
+              const newOrder =  await rh.placeOrders(orderOptions);
+              if (newOrder.state === 'confirmed') {
+                rule.limitOrderId = newOrder.id;
+                rule.time = newOrder.created_at;
+              }
             }
           }
-          // Check day trades
-          if (rule.quantity < 3) {
-            const orderOptions = {
-              account: this.account.url,
-              instrument: rule.instrumentUrl,
-              symbol: rule.symbol,
-              quantity: rule.quantity,
-              type: 'limit',
-              time_in_force: 'gtc',
-              trigger: 'stop',
-              extended_hours: true,
-              override_day_trade_checks: false,
-              override_dtbp_checks: false
-            };
-            // Rule active
-            if (rule.quantity > 0) {
-              options.price = rule.stopLossPrice;
-              options.stop_price = rule.stopLossPrice;
-              options.side = 'sell';
-            }
-            // Rule inactive
-            else {
-              options.price = rule.limitPrice;
-              options.stop_price = rule.limitPrice;
-              options.side = 'buy';
-            }
-          }
-        }
 
-        // Maintain order collection up to date
-        this.rules[index] = await rule.save();
-      });
+          // Maintain order collection up to date
+          this.rules[index] = await rule.save();
+        });
+      }
     } catch (error) {
       // For now just log the error. In the future we may want to try again reconnecting in 5 seconds or so
       console.error(error);

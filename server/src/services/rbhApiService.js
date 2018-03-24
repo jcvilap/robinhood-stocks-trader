@@ -106,12 +106,16 @@ class RHService {
      .then((recentDayTrades) => recentDayTrades.length);
   }
 
-  postWithAuth(URL) {
+  placeOrders(order) {
+    return this.postWithAuth(`${RBH_API_BASE}/orders/`, order);
+  }
+
+  postWithAuth(uri, form) {
     const options = {
       ...this.commonPrivate,
       method: 'POST',
-      uri: URL,
-      form: RH_CREDENTIALS
+      uri,
+      form
     };
     return request(options);
   }
