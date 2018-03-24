@@ -33,14 +33,6 @@ function Footer({ ...props }) {
             </ListItem>
           </List>
         </div>
-        <p className={classes.right}>
-          <span>
-            &copy; {1900 + new Date().getYear()}{" "}
-            <a href="http://www.creative-tim.com" className={classes.a}>
-              Creative Tim
-            </a>, made with love for a better web
-          </span>
-        </p>
       </div>
     </footer>
   );
