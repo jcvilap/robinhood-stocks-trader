@@ -1,11 +1,15 @@
-const Koa = require('koa');
-const mount = require('koa-mount');
-const graphqlHTTP = require('koa-graphql');
+const express = require('express');
+const bodyParser = require('body-parser');
+const {graphiqlExpress, graphqlExpress} = require('apollo-server-express');
+const {makeExecutableSchema} = require('graphql-tools');
 const {WEB_PORT, DB} = require('../env');
+const mongoose = require('mongoose');
+const {Rule} = require('../models/mongoose/Rule');
+const {RuleSchema, RuleResolvers} = require('../models/graphql/Rule');
 
 class App {
   constructor() {
-    this.server = new Koa();
+    this.server = express();
     mongoose.connect(DB);
     this.db = mongoose.connection;
 
@@ -24,15 +28,10 @@ class App {
    * After successfully listening on port, start the engine
    */
   start() {
-    this.server.use(mount('/graphql', graphqlHTTP({
-      schema: MyGraphQLSchema,
-      graphiql: true
-    })));
-
-    this.server.listen(WEB_PORT, () => {
-      console.log('Listening to port:', WEB_PORT);
-      this.engine.start();
-    });
+    const schema = makeExecutableSchema({typeDefs: RuleSchema, resolvers: RuleResolvers});
+    this.server.use('/graphql', bodyParser.json(), graphqlExpress({schema, context: {Rule}}));
+    this.server.use('/graphiql', graphiqlExpress({endpointURL: '/graphql'}));
+    this.server.listen(WEB_PORT, () => console.log('Listening to port:', WEB_PORT));
   }
 
   handleExit() {

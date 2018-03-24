@@ -1,4 +1,4 @@
-const mongoose = require('server/src/models/mongoose');
+const mongoose = require('mongoose');
 const Utils = require('../../utils');
 
 const Rule = new mongoose.Schema({
