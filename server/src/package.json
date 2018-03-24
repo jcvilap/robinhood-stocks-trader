@@ -1,0 +1,24 @@
+{
+  "name": "stocks-day-trader",
+  "version": "1.0.0",
+  "description": "Minimal trading predictor engine written in NodeJs",
+  "main": "server/src",
+  "scripts": {
+    "start": "node server/src/main.js",
+    "mongod": "mongod --dbpath /Users/jvila/mongodb/data"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jcvilap/stocks-day-trader.git"
+  },
+  "author": "Julio Vila",
+  "license": "MIT",
+  "dependencies": {
+    "request-promise-native": "^1.0.5"
+  },
+  "devDependencies": {
+    "nodemon": "^1.14.11",
+    "request": "^2.85.0",
+    "mongoose": "^5.0.11"
+  }
+}

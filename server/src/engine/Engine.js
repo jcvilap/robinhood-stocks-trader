@@ -113,7 +113,7 @@ class Engine {
                 options.stop_price = rule.limitPrice;
                 options.side = 'buy';
               }
-              // Post new order
+              // Post new order and save id, price and time
               const newOrder =  await rh.placeOrders(orderOptions);
               if (newOrder.state === 'confirmed') {
                 rule.limitOrderId = newOrder.id;
