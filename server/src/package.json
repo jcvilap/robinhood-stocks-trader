@@ -2,9 +2,10 @@
   "name": "stocks-day-trader",
   "version": "1.0.0",
   "description": "Minimal trading predictor engine written in NodeJs",
-  "main": "server/src",
   "scripts": {
-    "start": "node server/src/main.js",
+    "start": "npm run engine & npm run web",
+    "engine": "node server/src/engine/server.js",
+    "web": "node server/src/web/server.js",
     "mongod": "mongod --dbpath /Users/jvila/mongodb/data"
   },
   "repository": {
