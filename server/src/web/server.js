@@ -1,12 +1,11 @@
-const {createServer} = require('http');
-const mongoose = require('mongoose');
-const {ENGINE_PORT, DB} = require('../env');
-const Engine = require('./Engine');
+const Koa = require('koa');
+const mount = require('koa-mount');
+const graphqlHTTP = require('koa-graphql');
+const {WEB_PORT, DB} = require('../env');
 
 class App {
   constructor() {
-    this.server = createServer();
-    this.engine = new Engine();
+    this.server = new Koa();
     mongoose.connect(DB);
     this.db = mongoose.connection;
 
@@ -25,8 +24,13 @@ class App {
    * After successfully listening on port, start the engine
    */
   start() {
-    this.server.listen(ENGINE_PORT, () => {
-      console.log('Listening to port:', ENGINE_PORT);
+    this.server.use(mount('/graphql', graphqlHTTP({
+      schema: MyGraphQLSchema,
+      graphiql: true
+    })));
+
+    this.server.listen(WEB_PORT, () => {
+      console.log('Listening to port:', WEB_PORT);
       this.engine.start();
     });
   }

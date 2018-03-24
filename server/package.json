@@ -4,8 +4,8 @@
   "description": "Minimal trading predictor engine written in NodeJs",
   "scripts": {
     "start": "npm run engine & npm run web",
-    "engine": "node server/src/engine/server.js",
-    "web": "node server/src/web/server.js",
+    "engine": "nodemon -exec server/src/engine/server.js",
+    "web": "nodemon -exec server/src/web/server.js",
     "mongod": "mongod --dbpath /Users/jvila/mongodb/data"
   },
   "repository": {
@@ -18,8 +18,11 @@
     "request-promise-native": "^1.0.5"
   },
   "devDependencies": {
+    "koa": "^2.5.0",
+    "koa-graphql": "^0.7.5",
+    "koa-mount": "^3.0.0",
+    "mongoose": "^5.0.11",
     "nodemon": "^1.14.11",
-    "request": "^2.85.0",
-    "mongoose": "^5.0.11"
+    "request": "^2.85.0"
   }
 }

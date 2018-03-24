@@ -1,4 +1,4 @@
-const {Rule, validateRule} = require('../models/Rule');
+const {Rule, validateRule} = require('../models/mongoose/Rule');
 const Utils = require('../utils');
 const rh = require('../services/rbhApiService');
 
