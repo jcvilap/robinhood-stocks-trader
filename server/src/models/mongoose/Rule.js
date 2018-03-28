@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
-const Utils = require('../../utils');
+const moment = require('moment');
+const Utils = require('../../../utils');
 
 const Rule = new mongoose.Schema({
   /**
@@ -32,7 +33,7 @@ const Rule = new mongoose.Schema({
   /**
    * Time of the last stock price change
    */
-  time: Number,
+  time: Date,
   /**
    * Current status of the rule. Possible values:
    *  idle - the Rule is turned off by user
@@ -85,6 +86,10 @@ const Rule = new mongoose.Schema({
    * If true the last limit order will be cancelled, and a new limit order will be place based on the new price
    */
   shouldUpdateLimitOrder: Boolean,
+  /**
+   * If the rules should be run in extended hours
+   */
+  extendedHoursEnabled: Boolean
 });
 
 /**
@@ -93,20 +98,21 @@ const Rule = new mongoose.Schema({
  * @param quote
  * @param position
  */
-const validateRule = (rule, quote = {}, position = {}) => {
+const validateRule = (rule, quote = {}, position = {}, account = {}) => {
+  const {isMarketOpen} = Utils.marketTimes();
   // Set update limit order flag to false initially
   rule.shouldUpdateLimitOrder = false;
 
   // Update price from quote
-  if (quote.last_trade_price) {
-    rule.price = quote.last_trade_price;
-    rule.time = quote.updated_at;
-  }
+  rule.price = isMarketOpen ? quote.last_trade_price : quote.last_extended_hours_trade_price;
+  rule.time = quote.updated_at;
 
+  // Calculate number of shares to trade
   if (position.quantity) {
     rule.quantity = position.quantity;
-  } else {
-    // add logic to calculate amount of shares to buy based on available $$
+  } else if (account.margin_balances){
+    // Calculate limit orders at 5% above the market price in order to protect customers from overdraft
+    rule.quantity = Math.floor(Number(account.margin_balances.unallocated_margin_cash) / (rule.price + rule.price * 0.05));
   }
 
   // Upwards movement

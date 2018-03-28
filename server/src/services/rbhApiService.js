@@ -80,10 +80,10 @@ class RHService {
       .then(({results}) => results);
   }
 
-  getOrders() {
+  getOrder(id) {
     const options = {
       ...this.commonPrivate,
-      uri: `${RBH_API_BASE}/orders/?filter[state]=confirmed`
+      uri: `${RBH_API_BASE}/orders/${id}`
     };
     return request(options);
   }
@@ -103,7 +103,7 @@ class RHService {
 
   getDayTradeCount(accountNumber) {
    return this.getAccountResource(accountNumber, 'recent_day_trades')
-     .then((recentDayTrades) => recentDayTrades.length);
+     .then(({equity_day_trades}) => equity_day_trades.length);
   }
 
   placeOrders(order) {
