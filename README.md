@@ -1,40 +1,25 @@
 # Stock Day Trader
+This project is the result of many small failed attempts to build a true commission-free trading engine. Although coupled to Robinhood API, this code is easily extendable to work with any broker or API.
+
+
 [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/jcvilap/stocks-day-trader)
 
 ## Milestones
-#### Setup
 - [x] Set up a Node server and deploy it to Heroku
-- [x] Setup a Mongo instance in mLab and connect to it from Node
-- [ ] Deploy Client app to Surge.sh and point server calls to server's APIs
-
-#### Server
 - [x] Handle user auth
-- [x] Connect to market data using API 
-- [ ] Listen to changes on the market
-- [ ] Define `Rule` class
+- [x] Connect to market data using API
+- [x] Create and enable Buy/Sell strategies
+- [x] Calculate and incorporate RSI analysis to Buy/Sell strategies
+- [x] Perform analysis based on `rules` attributes
 - [ ] Instantiate initial `Rule` objects with default limits and persist data on Mongo
 - [ ] Fetch user `rules` from database on load
-- [x] Fetch user account using the Robinhood Private API
-- [x] Fetch user portfolio using the Robinhood Private API
-- [x] Fetch user positions using the Robinhood Private API
-- [ ] Fetch instruments using the Robinhood Private API
-- [ ] Fetch pending orders using the Robinhood Private API
-- [ ] Identify either by polling or other mechanism when a limit order is placed
-- [ ] Enable Buy/Sell/Stop/Limit actions using the Robinhood Private API
-- [ ] Watch for stock changes based on `rules`
-- [ ] After each market feed, process `rules` and ultimately place orders or update limits
+- [x] Watch for stock changes based on `rules`
+- [x] After each market feed, process `rules` and ultimately place orders or update limits
 - [ ] Add after-hours trading logic based on volume
-- [ ] Add day-trade limitations logic
-
-### Client
-- [ ] Enable new users to enter their Robinhood credentials
-- [ ] Enable user to create or reuse `rules`
-- [ ] Enable the user to associate stocks to `rules`
-- [ ] Enable user to start/stop their `stocks-day-traders`
+- [x] Add day-trade limitations logic
 
 ## Docs
 ### 3rd Party APIs
-- Stocks feed: [IEX Trading](https://iextrading.com/developer/)
 - Stocks order management: [Robinhood's Private API](https://api.robinhood.com/)
 
 ### Rules

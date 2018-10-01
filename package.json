@@ -1,0 +1,22 @@
+{
+  "name": "stocks-day-trader",
+  "version": "1.0.0",
+  "description": "Minimal day trading engine written in NodeJs",
+  "scripts": {
+    "start": "node src/engine/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jcvilap/stocks-day-trader.git"
+  },
+  "author": "Julio Vila",
+  "license": "MIT",
+  "dependencies": {
+    "http": "^0.0.0",
+    "lodash": "^4.17.10",
+    "moment": "^2.20.1",
+    "request": "^2.83.0",
+    "request-promise-native": "^1.0.5",
+    "uuid": "^3.3.2"
+  }
+}
