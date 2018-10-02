@@ -159,7 +159,8 @@ class RHService {
    */
   getHistoricals(symbol) {
     return this.getWithAuth(`${RBH_API_BASE}/marketdata/historicals/${symbol}/?span=hour&interval=15second&bounds=24_7`)
-      .then(({ historicals = [] }) => historicals);
+      .then(({ historicals = [] }) => historicals)
+      //.then(data => data.filter((d, i) => i % 4 === 0));
   }
 
   /**

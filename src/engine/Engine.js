@@ -2,17 +2,19 @@ const { get } = require('lodash');
 const uuid = require('uuid/v1');
 const Utils = require('../services/utils');
 const rh = require('../services/rhApiService');
+const tv = require('../services/tvApiService');
 
 // Todo: move constants to `process.env.js`
 const OVERRIDE_MARKET_CLOSE = true;
-const OVERRIDE_DAY_TRADES = true;
-const OVERRIDE_RSI = true;
+const OVERRIDE_DAY_TRADES = false;
+const OVERRIDE_RSI = false;
 const TOKEN_REFRESH_INTERVAL = 18000000; // 5h
-const REFRESH_INTERVAL = 10000; // 10s
+const REFRESH_INTERVAL = 5000; // 5s
 
 // Todo: Fetch form DB, saved in memory for now
 const rule = {
   symbol: 'SNAP',
+  exchange: 'NYSE',
   portfolioDiversity: 1,
   sellStrategyPerc: 1,
 };
@@ -47,19 +49,18 @@ class Engine {
   async processFeeds() {
     try {
       const { isMarketClosed } = Utils.marketTimes();
-      const { symbol } = rule;
+      const { symbol, exchange } = rule;
       const { account_number: accountNumber } = this.account;
 
       if (!OVERRIDE_MARKET_CLOSE && isMarketClosed) {
         return;
       }
 
-      const [position, dayTradeCount, quote, orders, historicals] = await Promise.all([
+      const [position, dayTradeCount, quote, orders] = await Promise.all([
         rh.getPosition(accountNumber, this.instrument.id),
         rh.getDayTradeCount(accountNumber),
-        rh.getQuote(symbol),
-        rh.getOrders(),
-        rh.getHistoricals(symbol)
+        tv.getQuote(`${exchange}:${symbol}`),
+        rh.getOrders()
       ]);
 
       if (!OVERRIDE_DAY_TRADES && dayTradeCount > 1) {
@@ -69,8 +70,10 @@ class Engine {
       const lastOrder = orders.find(({ instrument }) => instrument.includes(this.instrument.id));
       const availableBalance = Number(get(this.account, 'cash', 0));
       const investedBalance = Number(get(position, 'quantity', 0)) * Number(get(position, 'average_buy_price', 0));
-      const currentPrice = Number(get(quote, 'last_trade_price', 0));
-      const RSI = Utils.calculateRSI(historicals);
+      const currentPrice = Number(get(quote, 'close', 0));
+      const RSI =  Number(get(quote, 'rsi', 0));
+
+      console.debug('RSI:', RSI, '|', 'Price:', currentPrice);
 
       // Purchase Pattern
       if (availableBalance && !investedBalance) {
