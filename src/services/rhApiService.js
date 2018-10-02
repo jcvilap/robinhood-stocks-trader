@@ -33,7 +33,6 @@ class RHService {
    * Retrieves instrument by symbol
    * @param symbol
    * @returns {Promise}
-   * @returns {PromiseLike<{results: *} | never> | Promise<{results: *} | never>}
    */
   getInstrumentBySymbol(symbol) {
     const options = {
@@ -42,44 +41,6 @@ class RHService {
     };
     return request(options)
       .then(({ results }) => results[0]);
-  }
-
-  /**
-   * Retrieves instrument by id
-   * @param id
-   * @returns {Promise}
-   */
-  getInstrumentById(id) {
-    const options = {
-      ...common,
-      uri: `${RBH_API_BASE}/instruments/${id}/`,
-    };
-    return request(options);
-  }
-
-  /**
-   * Retrieves account user
-   * @returns {Promise}
-   */
-  getUser() {
-    const options = {
-      ...this.commonPrivate,
-      uri: `${RBH_API_BASE}/user/`,
-    };
-    return request(options);
-  }
-
-  /**
-   * Retrieves a single order
-   * @param id
-   * @returns {Promise}
-   */
-  getOrder(id) {
-    const options = {
-      ...this.commonPrivate,
-      uri: `${RBH_API_BASE}/orders/${id}`,
-    };
-    return request(options);
   }
 
   /**
@@ -150,17 +111,6 @@ class RHService {
     };
     return request(options)
       .then(({ results }) => results);
-  }
-
-  /**
-   * Get historical values for symbol
-   * @param symbol
-   * @returns {Promise}
-   */
-  getHistoricals(symbol) {
-    return this.getWithAuth(`${RBH_API_BASE}/marketdata/historicals/${symbol}/?span=hour&interval=15second&bounds=24_7`)
-      .then(({ historicals = [] }) => historicals)
-      //.then(data => data.filter((d, i) => i % 4 === 0));
   }
 
   /**
