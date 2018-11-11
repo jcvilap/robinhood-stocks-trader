@@ -29,7 +29,7 @@ class App {
 
   handleExit() {
     this.server.close(() => process.exit(0));
-  };
+  }
 }
 
 module.exports = new App();

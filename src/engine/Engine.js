@@ -1,4 +1,4 @@
-const { get } = require('lodash');
+const {get} = require('lodash');
 const uuid = require('uuid/v1');
 const Utils = require('../services/utils');
 const rh = require('../services/rhApiService');
@@ -48,9 +48,9 @@ class Engine {
 
   async processFeeds() {
     try {
-      const { isMarketClosed } = Utils.marketTimes();
-      const { symbol, exchange } = rule;
-      const { account_number: accountNumber } = this.account;
+      const {isMarketClosed} = Utils.marketTimes();
+      const {symbol, exchange} = rule;
+      const {account_number: accountNumber} = this.account;
 
       if (!OVERRIDE_MARKET_CLOSE && isMarketClosed) {
         return;
@@ -67,11 +67,11 @@ class Engine {
         return;
       }
 
-      const lastOrder = orders.find(({ instrument }) => instrument.includes(this.instrument.id));
+      const lastOrder = orders.find(({instrument}) => instrument.includes(this.instrument.id));
       const availableBalance = Number(get(this.account, 'cash', 0));
       const investedBalance = Number(get(position, 'quantity', 0)) * Number(get(position, 'average_buy_price', 0));
       const currentPrice = Number(get(quote, 'close', 0));
-      const RSI =  Number(get(quote, 'rsi', 0));
+      const RSI = Number(get(quote, 'rsi', 0));
 
       console.debug('RSI:', RSI, '|', 'Price:', currentPrice);
 
@@ -119,7 +119,7 @@ class Engine {
         const overbought = RSI >= 70;
         // If limit not set, put a stop loss at -.5% of the original purchase price
         if (!this.limitSellPrice) {
-          this.limitSellPrice = this.getLimitSellPrice(purchasePrice, { initial: true });
+          this.limitSellPrice = this.getLimitSellPrice(purchasePrice, {initial: true});
           return;
         }
         // Cancel a possible pending order
@@ -132,21 +132,21 @@ class Engine {
           return await this.placeOrder(position.quantity, price, symbol, 'sell');
         }
         // Increase limit sell price as the current price increases, do not move it if price decreases
-        const newLimit = this.getLimitSellPrice(currentPrice, { overbought });
+        const newLimit = this.getLimitSellPrice(currentPrice, {overbought});
         if (newLimit > this.limitSellPrice) {
           this.limitSellPrice = newLimit;
         }
       }
     } catch (error) {
-      console.debug({ error }, 'Error occurred during processFeeds execution');
+      console.debug({error}, 'Error occurred during processFeeds execution');
     }
   }
 
   /**
-   * Helper function to cancel last order ONLY if it exists
-   * @param order
-   * @returns {Promise.<*>}
-   */
+     * Helper function to cancel last order ONLY if it exists
+     * @param order
+     * @returns {Promise.<*>}
+     */
   cancelLastOrder(order) {
     if (get(order, 'cancel')) {
       console.debug(Utils.formatJSON(order, 0), 'Canceling order');
@@ -156,13 +156,13 @@ class Engine {
   }
 
   /**
-   * Helper function to place an order
-   * @param quantity
-   * @param price
-   * @param symbol
-   * @param side
-   * @returns {*}
-   */
+     * Helper function to place an order
+     * @param quantity
+     * @param price
+     * @param symbol
+     * @param side
+     * @returns {*}
+     */
   placeOrder(quantity, price, symbol, side) {
     const order = {
       account_id: this.account.id,
@@ -175,21 +175,20 @@ class Engine {
       ref_id: uuid()
     };
     console.debug(Utils.formatJSON(order, 0), 'Placing order');
-    mailer.send({ text: `Placed Order: ${Utils.formatJSON(order)}` });
     return rh.placeOrder(order);
   }
 
   /**
-   * Calculates stop loss price based on rule config.
-   * Note: On initialization and oversold indicator the stop loss percentage from the rule is
-   * divided by two in order to minimize risk and maximize profits respectively
-   * @param price
-   * @param options
-   * @returns {number}
-   */
+     * Calculates stop loss price based on rule config.
+     * Note: On initialization and oversold indicator the stop loss percentage from the rule is
+     * divided by two in order to minimize risk and maximize profits respectively
+     * @param price
+     * @param options
+     * @returns {number}
+     */
   getLimitSellPrice(price, options = {}) {
-    const { initial, overbought } = options;
-    const percentage = (initial || overbought) ? rule.sellStrategyPerc / 2 : rule.sellStrategyPerc;
+    const {initial, overbought} = options;
+    const percentage = (initial || overbought) ? rule.riskPerc / 2 : rule.riskPerc;
     return price - (price * (percentage / 100));
   }
 }

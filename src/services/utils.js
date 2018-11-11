@@ -38,7 +38,7 @@ class Utils {
   }
 
   static formatJSON(json, spaces = 2) {
-    return JSON.stringify(json, null, spaces)
+    return JSON.stringify(json, null, spaces);
   }
 }
 

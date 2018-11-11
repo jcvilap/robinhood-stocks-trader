@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "Minimal day trading engine written in NodeJs",
   "scripts": {
-    "start": "node src/engine/server.js"
+    "start": "node src/engine/server.js",
+    "lint": "./node_modules/.bin/eslint . --fix"
   },
   "repository": {
     "type": "git",
@@ -18,5 +19,8 @@
     "request": "^2.83.0",
     "request-promise-native": "^1.0.5",
     "uuid": "^3.3.2"
+  },
+  "devDependencies": {
+    "eslint": "^5.9.0"
   }
 }
