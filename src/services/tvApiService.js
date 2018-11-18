@@ -25,15 +25,21 @@ class TVService {
         symbols: {
           tickers: [...symbols]
         },
-        columns: ['RSI|1', 'close']
+        columns: ['RSI|1', 'close', 'open', 'MACD.macd', 'MACD.signal', 'EMA30', 'volume']
       })
     };
 
     return request(options)
       .then(({ data }) => data.map(s => ({
         symbol: s.s,
-        rsi: s.d[0],
-        close: s.d[1]
+        rsi: Number(s.d[0]),
+        close: Number(s.d[1]),
+        open: Number(s.d[2]),
+        diff: Number(s.d[1]) - Number(s.d[2]),
+        macd: Number(s.d[3]),
+        macdSignal: Number(s.d[4]),
+        ema: Number(s.d[5]),
+        volume: Number(s.d[6]),
       })));
   }
 }
