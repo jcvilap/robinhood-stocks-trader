@@ -34,9 +34,6 @@ jobs:
         key: v1-dependencies-{{ checksum "package.json" }}
 
   deploy:
-    filters:
-      branches:
-        only: development-santiago
     docker:
     - image: circleci/node:10.11
     steps:
@@ -44,3 +41,15 @@ jobs:
           at: workspace
       - copy_to_server:
           command: ssh bitnami@54.147.33.231 'git clone https://github.com/jcvilap/stocks-day-trader.git'
+
+workflows:
+  version: 2
+  build-deploy:
+    jobs:
+    - build
+    - deploy:
+        requires:
+        - build
+        filters:
+          branches:
+            only: development-santiago
