@@ -41,7 +41,7 @@ jobs:
       - attach_workspace:
           at: workspace
       - run: ssh -oStrictHostKeyChecking=no bitnami@54.147.33.231 'cd stocks-day-trader && git pull origin master'
-      - run: cd workspace/stocks-day-trader
+      - run: cd workspace && ls
       - restore_cache:
           keys:
           - v1-dependencies-{{ checksum "package.json" }}
