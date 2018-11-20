@@ -39,7 +39,7 @@ jobs:
     steps:
       - attach_workspace:
           at: workspace
-      - run: ssh bitnami@54.147.33.231 'git clone https://github.com/jcvilap/stocks-day-trader.git -Y'
+      - run: ssh bitnami@54.147.33.231 'git clone https://github.com/jcvilap/stocks-day-trader.git' -Y
 
 workflows:
   version: 2
