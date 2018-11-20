@@ -36,4 +36,17 @@ jobs:
     # run tests!
     #- run: yarn test
 
+  deploy:
+    requires:
+      - build
+    filters:
+      branches:
+        only: development-santiago
+    docker:
+      - image: circleci/node:10.11
+      steps:
+        - attach_workspace:
+            at: workspace
+        - copy_to_server:
+            command: ssh bitnami@54.147.33.231 'git clone https://github.com/jcvilap/stocks-day-trader.git'
 
