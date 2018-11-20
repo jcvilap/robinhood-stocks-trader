@@ -38,20 +38,7 @@ jobs:
     - image: circleci/node:10.11
     steps:
       - checkout
-      - attach_workspace:
-          at: workspace
-      - run: ssh -oStrictHostKeyChecking=no bitnami@54.147.33.231 'cd stocks-day-trader && git pull origin master'
-      - restore_cache:
-          keys:
-          - v1-dependencies-{{ checksum "package.json" }}
-          # fallback to using the latest cache if no exact match is found
-          - v1-dependencies-
-      - run: yarn install --prod
-      - save_cache:
-          paths:
-          - node_modules
-          key: v1-dependencies-{{ checksum "package.json" }}
-      - run: sudo yarn start
+      - run: ssh -oStrictHostKeyChecking=no bitnami@54.147.33.231 'cd stocks-day-trader && git pull origin master && yarn install --prod && yarn start'
 
 workflows:
   version: 2
