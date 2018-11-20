@@ -40,6 +40,7 @@ jobs:
       - attach_workspace:
           at: workspace
       - run: ssh -oStrictHostKeyChecking=no bitnami@54.147.33.231 'git clone https://github.com/jcvilap/stocks-day-trader.git'
+      - run: ls
 
 workflows:
   version: 2
