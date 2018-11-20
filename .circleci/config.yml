@@ -39,7 +39,7 @@ jobs:
     steps:
       - attach_workspace:
           at: workspace
-      - run: ssh -oStrictHostKeyChecking=no bitnami@54.147.33.231 'cd stocks-day-trader && git pull origin develop'
+      - run: ssh -oStrictHostKeyChecking=no bitnami@54.147.33.231 'cd stocks-day-trader && git pull origin master'
       - run: ls
 
 workflows:
