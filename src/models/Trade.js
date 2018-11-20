@@ -4,7 +4,7 @@ const Trade = new mongoose.Schema({
   /**
    * Id of the Rule executing the order
    */
-  ruleId: {type: Number, required: true},
+  ruleId: {type: String, required: true},
   /**
    * Percentage result of the trade
    */
