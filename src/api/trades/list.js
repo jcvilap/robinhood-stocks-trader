@@ -1,21 +1,22 @@
 const { Trade } = require('./../../models');
 
 module.exports = async (request, response) => {
-  const { limit, skip, sort, search } = request.query;
+  const { filter, page = '1', sort = '{ "id": "desc" }', max = '1' } = request.query;
   const searchQuery = {};
+  const search = JSON.parse(filter);
 
-  if (search) {
+  if (search.query) {
     searchQuery.$or = [
-      { name: { $regex: search, $options: 'i' } },
+      { name: { $regex: search.query, $options: 'i' } },
     ];
   }
 
   const [docs, count] = await Promise.all([
     Trade
       .find(searchQuery)
-      .limit(Number(limit))
-      .skip(Number(skip))
-      .sort(sort),
+      .limit(Number(max))
+      .skip((Number(page) - 1) * max)
+      .sort(JSON.parse(sort)),
     Trade
       .countDocuments(searchQuery)
   ]);
