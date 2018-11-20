@@ -50,4 +50,4 @@ workflows:
         - build
         filters:
           branches:
-            only: development-santiago
+            only: master
