@@ -33,12 +33,7 @@ jobs:
         - node_modules
         key: v1-dependencies-{{ checksum "package.json" }}
 
-    # run tests!
-    #- run: yarn test
-
   deploy:
-    requires:
-      - build
     filters:
       branches:
         only: development-santiago
@@ -49,4 +44,3 @@ jobs:
           at: workspace
       - copy_to_server:
           command: ssh bitnami@54.147.33.231 'git clone https://github.com/jcvilap/stocks-day-trader.git'
-
