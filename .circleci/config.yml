@@ -33,7 +33,21 @@ jobs:
         - node_modules
         key: v1-dependencies-{{ checksum "package.json" }}
 
-    # run tests!
-    #- run: yarn test
+  deploy:
+    docker:
+    - image: circleci/node:10.11
+    steps:
+      - checkout
+      - run: ssh -oStrictHostKeyChecking=no bitnami@54.147.33.231 'cd stocks-day-trader && git pull origin master && npm install --prod && pm2 restart main'
 
-
+workflows:
+  version: 2
+  build-deploy:
+    jobs:
+    - build
+    - deploy:
+        requires:
+        - build
+        filters:
+          branches:
+            only: master
