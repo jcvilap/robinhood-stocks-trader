@@ -4,9 +4,17 @@ module.exports = async (request, response, next) => {
   const token = request.headers['authorization'];
 
   if(token) {
-    await verifyJWTToken(token).then(() => {
-      next();
-    }).catch( () => {
+    try {
+      const isValid = await verifyJWTToken();
+      if(isValid) next();
+      else response.status(403).send({
+        status: 403,
+        message: {
+          status: 403
+        },
+        statusText: 'unauthorized'
+      });
+    } catch (e) {
       response.status(403).send({
         status: 403,
         message: {
@@ -14,15 +22,6 @@ module.exports = async (request, response, next) => {
         },
         statusText: 'unauthorized'
       });
-    });
-  } else {
-    response.status(403).send({
-      status: 403,
-      message: {
-        status: 403
-      },
-      statusText: 'unauthorized'
-    });
+    }
   }
-
 };
