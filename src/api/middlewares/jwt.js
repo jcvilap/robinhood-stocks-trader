@@ -5,7 +5,6 @@ module.exports = async (request, response, next) => {
 
   if(token) {
     await verifyJWTToken(token).then(() => {
-      console.log('good user request');
       next();
     }).catch( () => {
       response.status(403).send({
