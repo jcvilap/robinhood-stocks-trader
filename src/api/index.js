@@ -2,11 +2,12 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { API_PORT } = require('./../config/env');
-// const jwt = require('./middlewares/jwt');
+const jwt = require('./middlewares/jwt');
 const rules = require('./rules');
 const trades = require('./trades');
 const patterns = require('./patterns');
 const users = require('./users');
+const authenticate = require('./middlewares/authenticate');
 
 module.exports = (db) => {
   const api = express();
@@ -20,9 +21,9 @@ module.exports = (db) => {
     next();
   });
 
-  // api.use(jwt);
+  api.post('/api/v1/login', authenticate);
 
-  // api.post('/api/v1/login', )
+  api.use(jwt);
 
   api.get('/api/v1/rules', rules.list);
   api.get('/api/v1/trades', trades.list);
