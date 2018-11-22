@@ -38,7 +38,7 @@ jobs:
     - image: circleci/node:10.11
     steps:
       - checkout
-      - run: ssh -oStrictHostKeyChecking=no bitnami@54.147.33.231 'cd stocks-day-trader && git pull origin master && npm install --prod && pm2 restart main'
+      - run: ssh -oStrictHostKeyChecking=no bitnami@54.147.33.231 'cd stocks-day-trader && git pull && npm install --prod && pm2 restart main'
 
 workflows:
   version: 2
