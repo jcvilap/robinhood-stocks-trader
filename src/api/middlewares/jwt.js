@@ -5,23 +5,25 @@ module.exports = async (request, response, next) => {
 
   if(token) {
     try {
-      const isValid = await verifyJWTToken();
+      const isValid = await verifyJWTToken(token);
       if(isValid) next();
-      else response.status(403).send({
-        status: 403,
-        message: {
-          status: 403
-        },
-        statusText: 'unauthorized'
-      });
+      else {
+        response.status(403).send({
+          status: 403,
+          statusText: 'unauthorized'
+        });
+      }
     } catch (e) {
       response.status(403).send({
         status: 403,
-        message: {
-          status: 403
-        },
-        statusText: 'unauthorized'
+        statusText: 'authorization error'
       });
     }
+  } else {
+    response.status(403).send({
+      status: 403,
+      statusText: 'no token'
+    });
   }
+
 };
