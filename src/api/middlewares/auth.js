@@ -13,7 +13,7 @@ function verifyJWTToken(token) {
 }
 
 function createJWToken(details) {
-  return jwt.sign({ id: details.user._id }, JWT.secret, {
+  return jwt.sign({ id: details.user._id, role: details.user.role }, JWT.secret, {
     expiresIn: details.expiresIn // 86400 -- 24 hours
   });
 }
