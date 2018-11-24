@@ -3,9 +3,9 @@ const bcrypt = require('bcrypt');
 const SALT_WORK_FACTOR = 10;
 
 const User = new mongoose.Schema({
-  username: { type: String, required: true },
-  password: { type: String, required: true },
-  role: { type: String, required: true },
+  username: {type: String, required: true},
+  password: {type: String, required: true},
+  role: {type: String, required: true},
   brokerConfig: {
     username: String,
     password: String,

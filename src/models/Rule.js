@@ -5,7 +5,7 @@ const Rule = new mongoose.Schema({
    * Stock symbol
    * @example 'SNAP'
    */
-  symbol: {type: String, required: true},
+  symbol: {type: String, required: true, index: true},
   /**
    * Market exchange
    * @example 'NYSE'
@@ -38,7 +38,7 @@ const Rule = new mongoose.Schema({
   /**
    * Rule enabled flag
    */
-  enabled: Boolean,
+  enabled: {type: Boolean, index: true},
   /**
    * Risk management
    */
