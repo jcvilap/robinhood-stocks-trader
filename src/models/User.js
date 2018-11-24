@@ -21,23 +21,34 @@ const User = new mongoose.Schema({
   }
 });
 
-User.pre('save', function(next) {
-  var user = this;
+User.pre('save', async function (next) {
+  const user = this;
 
-  if (!user.isModified('password')) return next();
+  if (!user.isModified('password')
+    && !user.isModified('brokerConfig.password')
+    && !user.isModified('emailConfig.password')) {
+    return next();
+  }
 
-  bcrypt.genSalt(SALT_WORK_FACTOR, function(err, salt) {
-    if (err) return next(err);
-    bcrypt.hash(user.password, salt, function(err, hash) {
-      if (err) return next(err);
-      user.password = hash;
-      next();
-    });
-  });
+  const salt = await bcrypt.genSalt(SALT_WORK_FACTOR);
+
+  if (user.isModified('password')) {
+    user.password = await bcrypt.hash(user.password, salt);
+  }
+
+  if (user.isModified('brokerConfig.password')) {
+    user.brokerConfig.password = await bcrypt.hash(user.brokerConfig.password, salt);
+  }
+
+  if (user.isModified('emailConfig.password')) {
+    user.emailConfig.password = await bcrypt.hash(user.emailConfig.password, salt);
+  }
+
+  return next();
 });
 
-User.methods.comparePassword = function(candidatePassword, cb) {
-  bcrypt.compare(candidatePassword, this.password, function(err, isMatch) {
+User.methods.comparePassword = function (candidatePassword, cb) {
+  bcrypt.compare(candidatePassword, this.password, function (err, isMatch) {
     if (err) return cb(err);
     cb(null, isMatch);
   });
