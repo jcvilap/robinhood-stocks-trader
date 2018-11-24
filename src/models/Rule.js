@@ -16,6 +16,10 @@ const Rule = new mongoose.Schema({
    */
   instrumentId: {type: String, required: true},
   /**
+   * User id
+   */
+  user: {type: mongoose.Schema.Types.ObjectId, ref: 'User'},
+  /**
    * Last filled order id
    */
   lastOrderId: {type: String, required: true},
