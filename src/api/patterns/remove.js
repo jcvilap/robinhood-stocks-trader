@@ -5,5 +5,7 @@ module.exports = async (request, response) => {
 
   await Pattern.deleteOne({ _id: id });
 
-  response.status(201);
+  response.status(201).send({
+    statusText: 'OK'
+  });
 };
