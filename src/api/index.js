@@ -50,6 +50,8 @@ module.exports = (db) => {
   api.delete('/api/v1/patterns/:id', patterns.remove);
   api.delete('/api/v1/patterns/:id', patterns.remove);
 
+  api.delete('/api/v1/patterns', patterns.deleteMany);
+
   api.listen(API_PORT, () => console.debug(`Database connected. API running on port ${API_PORT}`));
 };
 
