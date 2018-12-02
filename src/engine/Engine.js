@@ -28,8 +28,6 @@ class Engine {
     this.ruleMedataData = new Map();
     this.users = [];
     this.rules = [];
-
-    this.start();
   }
 
   async start() {
