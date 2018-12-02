@@ -2,10 +2,6 @@ const mongoose = require('mongoose');
 
 const Rule = new mongoose.Schema({
   /**
-   * User id
-   */
-  user_id: {type: String, required: true},
-  /**
    * Stock symbol
    * @example 'SNAP'
    */
@@ -22,7 +18,7 @@ const Rule = new mongoose.Schema({
   /**
    * User id
    */
-  user: {type: mongoose.Schema.Types.ObjectId, ref: 'User'},
+  user: {type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true},
   /**
    * Last filled order id
    */

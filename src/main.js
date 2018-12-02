@@ -15,19 +15,19 @@ class App {
     this.db = mongoose.connection;
 
     this.registerEvents();
-    this.handleExit = this.handleExit.bind(this);
   }
 
   registerEvents() {
-    process.on('SIGTERM', this.handleExit);
+    process.on('SIGTERM', () => this.handleExit());
     this.db.on('error', (e) => console.error('connection error:', e));
-    this.db.once('open', () => createApi(this.db) && this.start());
+    this.db.once('open', () => this.start());
   }
 
   start() {
+    createApi(this.db);
     this.server.listen(ENGINE_PORT, () => {
-      console.log('Listening to port:', ENGINE_PORT);
-      //this.engine.start();
+      console.log('Engine running on port:', ENGINE_PORT);
+      this.engine.start();
     });
   }
 
