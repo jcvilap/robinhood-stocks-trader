@@ -26,7 +26,7 @@ const Rule = new mongoose.Schema({
   /**
    * Last filled order id
    */
-  lastOrderId: {type: String, required: true},
+  lastOrderId: {type: String},
   /**
    * Number of shares to trade
    */
