@@ -15,7 +15,6 @@ class App {
     this.db = mongoose.connection;
 
     this.registerEvents();
-    //this.start();
 
     this.handleExit = this.handleExit.bind(this);
   }
@@ -23,7 +22,7 @@ class App {
   registerEvents() {
     process.on('SIGTERM', this.handleExit);
     this.db.on('error', (e) => console.error('connection error:', e));
-    this.db.once('open', () => createApi(this.db));
+    this.db.once('open', () => createApi(this.db)/* && this.start()*/);
   }
 
   /**

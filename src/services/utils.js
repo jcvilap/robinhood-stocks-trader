@@ -1,4 +1,7 @@
 const moment = require('moment');
+const crypto = require('crypto-js');
+const { APP_SECRET } = require('../config/env');
+
 
 class Utils {
   /**
@@ -39,6 +42,15 @@ class Utils {
 
   static formatJSON(json, spaces = 2) {
     return JSON.stringify(json, null, spaces);
+  }
+
+  static encrypt(text) {
+    return crypto.AES.encrypt(text, APP_SECRET).toString();
+  }
+
+  static decrypt(encrypted) {
+    const bytes  = crypto.AES.decrypt(encrypted, APP_SECRET);
+    return bytes.toString(crypto.enc.Utf8);
   }
 }
 

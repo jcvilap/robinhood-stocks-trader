@@ -1,32 +1,30 @@
 const request = require('request-promise-native');
-const { RBH_API_BASE, RH_CREDENTIALS } = require('../config/env');
+const { RBH_API_BASE } = require('../config/env');
+const Utils = require('../services/utils');
 
 const common = { json: true };
 const TOKEN_REFRESH_INTERVAL = 18000000;
 
 class RHService {
-  constructor() {
-    this.commonPrivate = { ...common, headers: {} };
-  }
-
   /**
    * Authenticates against RB service and stores Authorization header for future requests
    * @returns {Promise}
    */
-  auth() {
+  async auth(config) {
     const options = {
       ...common,
       method: 'POST',
       uri: `${RBH_API_BASE}/oauth2/token/`,
       form: {
-        ...RH_CREDENTIALS,
+        ...config,
+        password: Utils.decrypt(config.password),
         grant_type: 'password',
         scope: 'internal',
         expires_in: TOKEN_REFRESH_INTERVAL // 5h
       }
     };
     return request(options)
-      .then(({ access_token, token_type }) => this.commonPrivate.headers.Authorization = `${token_type} ${access_token}`);
+      .then(({ access_token, token_type }) => `${token_type} ${access_token}`);
   }
 
   /**
@@ -47,9 +45,12 @@ class RHService {
    * Retrieves all orders for account
    * @returns {Promise}
    */
-  getOrders() {
+  getOrders({ token }) {
     const options = {
-      ...this.commonPrivate,
+      ...common,
+      headers: {
+        Authorization: token,
+      },
       uri: `${RBH_API_BASE}/orders/`,
     };
     return request(options)
@@ -70,9 +71,12 @@ class RHService {
    * Note: Even though it seems like RH supports multiple accounts for a user, for now we will not...
    * @returns {Promise}
    */
-  getAccount() {
+  getAccount({ token }) {
     const options = {
-      ...this.commonPrivate,
+      ...common,
+      headers: {
+        Authorization: token,
+      },
       uri: `${RBH_API_BASE}/accounts/`,
     };
     return request(options)

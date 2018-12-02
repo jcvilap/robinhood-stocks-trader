@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
-const SALT_WORK_FACTOR = 10;
+const crypto = require('crypto-js');
+const { SALT_WORK_FACTOR, APP_SECRET } = require('../config/env');
+const Utils = require('../services/utils');
 
 const User = new mongoose.Schema({
   username: {type: String, required: true},
@@ -30,18 +32,18 @@ User.pre('save', async function (next) {
     return next();
   }
 
-  const salt = await bcrypt.genSalt(SALT_WORK_FACTOR);
-
+  // User password will never be decrypted
   if (user.isModified('password')) {
+    const salt = await bcrypt.genSalt(SALT_WORK_FACTOR);
     user.password = await bcrypt.hash(user.password, salt);
   }
 
+  // Other app passwords need to be decrypted to provide in API auth
   if (user.isModified('brokerConfig.password')) {
-    user.brokerConfig.password = await bcrypt.hash(user.brokerConfig.password, salt);
+    user.brokerConfig.password = Utils.encrypt(user.brokerConfig.password);
   }
-
   if (user.isModified('emailConfig.password')) {
-    user.emailConfig.password = await bcrypt.hash(user.emailConfig.password, salt);
+    user.emailConfig.password = Utils.encrypt(user.emailConfig.password);
   }
 
   return next();

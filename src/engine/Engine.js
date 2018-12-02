@@ -2,103 +2,79 @@ const {get, uniq} = require('lodash');
 const {Query} = require('mingo');
 const uuid = require('uuid/v1');
 const Utils = require('../services/utils');
+const {Rule} = require('../models');
 const rh = require('../services/rhApiService');
 const tv = require('../services/tvApiService');
 
 // Todo: move constants to `process.env.js`
 const OVERRIDE_MARKET_CLOSE = true;
-const OVERRIDE_DAY_TRADES = false;
 const OVERRIDE_RSI = false;
 const TOKEN_REFRESH_INTERVAL = 18000000; // 5h
 const RULES_REFRESH_INTERVAL = 10000; // 5h
 const REFRESH_INTERVAL = 5000; // 5s
 
-// Rules
-const getRules = () => Promise.resolve([{
-  _id: 'rule-object-id',
-  symbol: 'SNAP',
-  exchange: 'NYSE',
-  instrumentId: '1e513292-5926-4dc4-8c3d-4af6b5836704',
-  lastOrderId: 'a298f5e0-bbcf-4569-abbc-10130f0c4773',
-  numberOfShares: 1,
-  positiveTrades: 3,
-  negativeTrades: 1,
-  enabled: true,
-  risk: {
-    followPrice: true,
-    percent: 1,
-    value: 9,
-  },
-  strategy: {
-    buy: oversold,
-    sell: null,
-  }
-}]);
-
-// Patterns
-const oversold = {
-  rsi: {$lt: 30},
-  volume: {$gte: 1000000},
-  diff: {$gt: 0}, // calculate as close - open
-};
-
-// Trades
-const trades = [{
-  ruleId: 'rule-object-id',
-  realizedPercentage: -1,
-  date: new Date(),
-}];
+const getActiveRules = () => Rule
+  .find({enabled: true})
+  .populate('user')
+  .populate('strategy.in')
+  .populate('strategy.out');
 
 class Engine {
   constructor() {
-    this.account = null;
-    this.limitBuyPrice = null;
-    this.limitSellPrice = null;
-    this.rules = null;
+    /**
+     * This map will hold non persisted rule data such as auth tokens and risk limits
+     * @type {Map<ObjectId, any>}
+     */
+    this.ruleMedataData = new Map();
+    this.users = [];
+    this.rules = [];
+
+    this.start();
   }
 
   async start() {
     try {
-      await rh.auth();
-      const [account, rules] = await Promise.all([
-        rh.getAccount(),
-        getRules()
-      ]);
-      this.account = account;
-      this.rules = rules;
-
+      await this.loadRulesAndAccounts();
       await this.processFeeds();
 
       setInterval(() => rh.auth(), TOKEN_REFRESH_INTERVAL);
-      setInterval(async () => this.rules = await getRules(), RULES_REFRESH_INTERVAL);
+      setInterval(async () => this.loadRulesAndAccounts(), RULES_REFRESH_INTERVAL);
       setInterval(async () => this.processFeeds(), REFRESH_INTERVAL);
     } catch (error) {
       console.error(error);
     }
   }
 
+  async loadRulesAndAccounts() {
+    this.rules = await getActiveRules();
+    this.users = uniq(this.rules.map(rule => rule.user.toObject()));
+
+    // Get user tokens for authentication
+    await Promise.all(this.users.map(user => rh.auth(user.brokerConfig)
+      .then(token => user.token = token)));
+
+    // Get user accounts user
+    await Promise.all(this.users.map(user => rh.getAccount(user)
+      .then(account => user.account = account)));
+  }
+
   async processFeeds() {
     try {
       const {isMarketClosed} = Utils.marketTimes();
-      const symbols = uniq(this.rules.map(r => `${r.exchange}:${r.symbol}`));
 
       if (!OVERRIDE_MARKET_CLOSE && isMarketClosed) {
         return;
       }
 
-      const [quotes, orders, account, rules] = await Promise.all([
-        tv.getQuotes(...symbols),
-        rh.getOrders(),
-        rh.getAccount(),
-        getRules(),
-      ]);
+      const symbols = uniq(this.rules.map(r => `${r.exchange}:${r.symbol}`));
+      const quotes = await tv.getQuotes(...symbols);
 
-      let availableBalance = Number(get(account, 'cash', 0));
-
-      Promise.all(rules.map(async rule => {
+      Promise.all(this.rules.map(async rule => {
         const quote = quotes.find(q => q.symbol === `${rule.exchange}:${rule.symbol}`);
-        const buyQuery = new Query(rule.query.buy);
-        const sellQuery = new Query(rule.query.sell);
+        const buyQuery = new Query(rule.strategy.in);
+        const sellQuery = new Query(rule.strategy.out);
+
+
         const previousOrder = orders.find(({id}) => id === rule.orderId);
         const isRuleActive = previousOrder.side === 'buy' && previousOrder.state === 'filled';
         const innerPromises = [];
@@ -109,11 +85,11 @@ class Engine {
 
           if (!rule.limitBuyPrice)
           // Price not longer oversold
-          if (!OVERRIDE_RSI && RSI > 30) {
-            this.limitBuyPrice = null;
-            // Cancel order and exit
-            return await this.cancelOrder(lastOrder);
-          }
+            if (!OVERRIDE_RSI && RSI > 30) {
+              this.limitBuyPrice = null;
+              // Cancel order and exit
+              return await this.cancelOrder(lastOrder);
+            }
           // If limit not set, set it and exit until next tick
           if (!this.limitBuyPrice) {
             this.limitBuyPrice = currentPrice;
