@@ -3,6 +3,7 @@ const list = require('./list');
 const create = require('./create');
 const remove = require('./remove');
 const update = require('./update');
+const deleteMany = require('./deleteMany');
 
 module.exports = {
   getOne,
@@ -10,4 +11,5 @@ module.exports = {
   create,
   update,
   remove,
+  deleteMany
 };

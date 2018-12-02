@@ -48,7 +48,12 @@ module.exports = (db) => {
   api.delete('/api/v1/rules/:id', rules.remove);
   api.delete('/api/v1/trades/:id', trades.remove);
   api.delete('/api/v1/patterns/:id', patterns.remove);
-  api.delete('/api/v1/patterns/:id', patterns.remove);
+  api.delete('/api/v1/users/:id', users.remove);
+
+  api.delete('/api/v1/rules', rules.deleteMany);
+  api.delete('/api/v1/trades', trades.deleteMany);
+  api.delete('/api/v1/patterns', patterns.deleteMany);
+  api.delete('/api/v1/users', users.deleteMany);
 
   api.listen(API_PORT, () => console.debug(`Database connected. API running on port ${API_PORT}`));
 };

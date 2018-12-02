@@ -1,9 +1,9 @@
 const { Pattern } = require('./../../models');
 
 module.exports = async (request, response) => {
-  const { id } = request.params;
+  const ids = request.body;
 
-  await Pattern.deleteOne({ _id: id });
+  await Pattern.deleteMany({ _id: { $in: ids}});
 
   response.status(201).send({
     statusText: 'OK'

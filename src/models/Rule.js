@@ -2,6 +2,10 @@ const mongoose = require('mongoose');
 
 const Rule = new mongoose.Schema({
   /**
+   * User id
+   */
+  user_id: {type: String, required: true},
+  /**
    * Stock symbol
    * @example 'SNAP'
    */
