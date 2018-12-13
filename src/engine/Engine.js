@@ -6,7 +6,7 @@ const {
   marketTimes,
   assert,
   formatJSON,
-  ONE_MINUTE,
+  TEN_SECONDS,
   FIVE_SECONDS,
   FIVE_HOURS,
   TEN_MINUTES
@@ -37,7 +37,7 @@ class Engine {
       await this.loadRulesAndAccounts();
       await this.processFeeds();
 
-      setInterval(() => this.loadRulesAndAccounts(), ONE_MINUTE);
+      setInterval(() => this.loadRulesAndAccounts(), TEN_SECONDS);
       setInterval(() => this.processFeeds(), FIVE_SECONDS);
     } catch (error) {
       console.error(error);
@@ -98,9 +98,8 @@ class Engine {
     }).filter(a => a);
 
     // Append fresh user orders
-    const orderPromises = this.users.map(user =>
-      rh.getOrders(user)
-        .then(orders => user.orders = orders));
+    const orderPromises = this.users.map(user => rh.getOrders(user)
+      .then(orders => user.orders = orders));
 
     await Promise.all(accountPromises.concat(orderPromises));
   }
@@ -130,11 +129,12 @@ class Engine {
         assert(buyQuery.__criteria || sellQuery.__criteria, `No strategy found for rule ${rule._id}`);
 
         const lastOrder = orderId && (user.orders.find(({ id }) => id === orderId) || await rh.getOrder(orderId, user));
-        const isRuleActive = get(lastOrder, 'side') === 'buy' && get(lastOrder, 'state') === 'filled';
+        const orderIsFilled = get(lastOrder, 'state') === 'filled';
+        const isRuleActive = get(lastOrder, 'side') === 'buy' && orderIsFilled;
         const innerPromises = [];
 
         if (!isRuleActive && buyQuery.test(quote)) {
-          await this.cancelOrder(lastOrder);
+          this.cancelOrder(lastOrder);
           const currentPrice = quote.close;
           const riskValue = currentPrice - (currentPrice * ((risk.percent * 0.5) / 100));
           const promise = this.placeOrder(user, numberOfShares, currentPrice, symbol, 'buy')
