@@ -58,12 +58,28 @@ class RHService {
   }
 
   /**
+   * Retrieves order by id
+   * @returns {Promise}
+   */
+  getOrder(id, { token }) {
+    const options = {
+      ...common,
+      headers: {
+        Authorization: token,
+      },
+      uri: `${RBH_API_BASE}/orders/${id}`,
+    };
+    return request(options);
+  }
+
+  /**
    * Places a generic order
+   * @param user
    * @param order
    * @returns {Promise}
    */
-  placeOrder(order) {
-    return this.postWithAuth(`${RBH_API_BASE}/orders/`, order);
+  placeOrder(user, order) {
+    return this.postWithAuth(user, `${RBH_API_BASE}/orders/`, order);
   }
 
   /**
@@ -142,13 +158,17 @@ class RHService {
   /**
    * Generic POST request with authentication headers
    * @param uri
+   * @param token
    * @param body
    * @param customOption
    * @returns {Promise}
    */
-  postWithAuth(uri, body, customOption = {}) {
+  postWithAuth({ token }, uri, body, customOption = {}) {
     const options = {
-      ...this.commonPrivate,
+      ...common,
+      headers: {
+        Authorization: token,
+      },
       method: 'POST',
       uri,
       body,

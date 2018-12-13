@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
-const crypto = require('crypto-js');
-const { SALT_WORK_FACTOR, APP_SECRET } = require('../config/env');
+const { SALT_WORK_FACTOR } = require('../config/env');
 const Utils = require('../services/utils');
 
 const User = new mongoose.Schema({
