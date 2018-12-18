@@ -23,24 +23,22 @@ const marketTimes = () => {
   };
 };
 
-/**
- * Calculates the stock quantity based on price and amount
- * @param quotePrice
- * @param amount
- * @param percentage
- * @returns {any}
- */
-const calculateQuantity = (quotePrice, amount, percentage) => {
-  const _quotePrice = Number(quotePrice);
-  const _balance = Number(amount);
-  const _percentage = Number(percentage);
-  const amountToInvest = _balance * (_percentage / 100);
-  const result = amountToInvest / _quotePrice;
-  return result > 1 ? result.toFixed(0).toString() : 0;
-};
-
 const formatJSON = (json, spaces = 2) => {
   return JSON.stringify(json, null, spaces);
+};
+
+/**
+ * Calculates the percentage 'riskPercentage' from the 'price'
+ * @example price = 100, riskPercentage = 1, risk value = 99
+ * @param price
+ * @param riskPercentage
+ * @param options
+ * @returns {number}
+ */
+const  getRiskFromPercentage = (price, riskPercentage, options = {}) => {
+  const { initial, overbought } = options;
+  const percentage = (initial || overbought) ? riskPercentage / 2 : riskPercentage;
+  return price - (price * (percentage / 100));
 };
 
 const encrypt = (text) => {
@@ -75,9 +73,9 @@ const ONE_HOUR = ONE_MINUTE * 60;
 const FIVE_HOURS = ONE_HOUR * 5;
 
 module.exports = {
-  calculateQuantity,
   marketTimes,
   formatJSON,
+  getRiskFromPercentage,
   encrypt,
   decrypt,
   assert,

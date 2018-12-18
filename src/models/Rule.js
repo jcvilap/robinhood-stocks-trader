@@ -45,13 +45,13 @@ const Rule = new mongoose.Schema({
   risk: {
     /**
      * If true, the limit risk will follow the price, else, it will stay
-     * as a percentage of the initial value
+     * as a getRiskPercentage of the initial value
      */
     followPrice: Boolean,
     /**
      * Percentage of the initial value to risk off
      */
-    percent: Number,
+    getRiskPercentage: Number,
     /**
      * Current limit calculate value(stock price)
      */

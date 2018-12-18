@@ -4,15 +4,27 @@ const Trade = new mongoose.Schema({
   /**
    * Id of the Rule executing the order
    */
-  ruleId: {type: String, required: true},
+  rule: { type: mongoose.Schema.Types.ObjectId, ref: 'Rule', required: true },
   /**
-   * Percentage result of the trade
+   * Price used to enter the trade
    */
-  realizedPercentage: {type: Number, required: true},
+  buyPrice: { type: Number },
+  /**
+   * Price used to exit the trade
+   */
+  sellPrice: { type: Number },
   /**
    * Date the trade was complete
    */
-  date: {type: Date, required: true },
+  date: { type: Date },
+  /**
+   * Whether the trade has ended
+   */
+  completed: { type: Boolean, default: false, index: true },
+  /**
+   * User id
+   */
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 });
 
 module.exports = mongoose.model('Trade', Trade);

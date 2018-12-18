@@ -6,23 +6,18 @@ const {
   marketTimes,
   assert,
   formatJSON,
+  getRiskFromPercentage,
   TEN_SECONDS,
   FIVE_SECONDS,
   FIVE_HOURS,
   TEN_MINUTES
 } = require('../services/utils');
-const { Rule } = require('../models');
+const { Rule, Trade, queries: { getActiveRules, getIncompleteTrades } } = require('../models');
 const rh = require('../services/rhApiService');
 const tv = require('../services/tvApiService');
 
 // Todo: move constants to `process.env.js`
 const OVERRIDE_MARKET_CLOSE = true;
-
-const getActiveRules = () => Rule
-  .find({ enabled: true })
-  .populate('user')
-  .populate('strategy.in')
-  .populate('strategy.out');
 
 class Engine {
   constructor() {
@@ -113,7 +108,8 @@ class Engine {
       }
 
       const symbols = uniq(this.rules.map(r => `${r.exchange}:${r.symbol}`));
-      const quotes = await tv.getQuotes(...symbols);
+      const [quotes, trades] = await Promise.all([tv.getQuotes(...symbols), getIncompleteTrades()]);
+      const promises = [];
 
       this.rules.forEach(async rule => {
         const { lastOrderId: orderId, risk, numberOfShares, symbol } = rule;
@@ -128,15 +124,57 @@ class Engine {
         const sellQuery = new Query(JSON.parse(get(rule, 'strategy.out.query', null)));
         assert(buyQuery.__criteria || sellQuery.__criteria, `No strategy found for rule ${rule._id}`);
 
+        let trade = trades.find(({ ruleId }) => rule._id.equals(ruleId));
         const lastOrder = orderId && (user.orders.find(({ id }) => id === orderId) || await rh.getOrder(orderId, user));
-        const orderIsFilled = get(lastOrder, 'state') === 'filled';
-        const isRuleActive = get(lastOrder, 'side') === 'buy' && orderIsFilled;
-        const innerPromises = [];
+        const currentPrice = quote.close;
+        const isUptick = quote.close > quote.open;
+        const isFilled = get(lastOrder, 'state') === 'filled';
+        const isSell = get(lastOrder, 'side') === 'sell';
+        const isBuy = get(lastOrder, 'side') === 'buy';
+        const isRuleActive = isBuy && isFilled;
+        const isRuleInactive = isSell && isFilled;
 
+        /**
+         * Trade management
+         */
+        if (isFilled) {
+          // Last order is a buy and no trade has been initiated, create one
+          if (isBuy && !trade) {
+            trade = new Trade({
+              rule: rule._id.toString(),
+              user: user._id.toString(),
+              buyPrice: Number(lastOrder.price),
+            });
+
+            promises.push(trade.save());
+          }
+          // Trade was finished by last sell order
+          else if (isSell && trade && get(trade, 'completed') === false) {
+            trade.set('completed', true);
+            trade.set('sellPrice', Number(lastOrder.price));
+            trade.set('date', new Date());
+
+            if (trade.sellPrice > trade.buyPrice) {
+              rule.positiveTrades = rule.positiveTrades + 1;
+            } else {
+              rule.negativeTrades = rule.negativeTrades + 1;
+            }
+
+            promises.push(trade.save());
+            promises.push(rule.save());
+          }
+        }
+
+        /**
+         * BUY pattern
+         */
         if (!isRuleActive && buyQuery.test(quote)) {
-          this.cancelOrder(lastOrder);
-          const currentPrice = quote.close;
-          const riskValue = currentPrice - (currentPrice * ((risk.percent * 0.5) / 100));
+          // Cancel any pending order
+          const isCancelled = await this.cancelOrder(lastOrder);
+          assert(isCancelled, `Failed to cancel order ${orderId}. It maybe got filled while sending the request`);
+
+          // Initially set risk value one half of its original value in the rule
+          const riskValue = currentPrice - (currentPrice * ((risk.percentage * 0.5) / 100));
           const promise = this.placeOrder(user, numberOfShares, currentPrice, symbol, 'buy')
             .then(order => {
               rule.set('lastOrderId', order.id);
@@ -144,38 +182,58 @@ class Engine {
               return rule.save();
             });
 
-          innerPromises.push(promise);
+          promises.push(promise);
         }
-        // Sell pattern
-        else if (isRuleActive) {
-          // I'm here
 
+        /**
+         * SELL pattern
+         */
+        else if (!isRuleInactive) {
+          const riskValue = get(rule, 'risk.value');
+          const riskPriceReached = riskValue > currentPrice;
 
-          const purchasePrice = Number(lastOrder.price);
-          const overbought = RSI >= 70;
-          // If limit not set, put a stop loss at -.5% of the original purchase price
-          if (!this.limitSellPrice) {
-            this.limitSellPrice = this.getLimitSellPrice(purchasePrice, { initial: true });
-            return;
-          }
-          // Cancel a possible pending order
-          await this.cancelOrder(lastOrder);
-          // If stop loss hit, sell immediate
-          if (currentPrice <= this.limitSellPrice) {
+          // Stop loss reached or sell pattern matches, trigger sell
+          if (riskPriceReached || sellQuery.test(quote)) {
+            // Cancel any pending order
+            const isCancelled = await this.cancelOrder(lastOrder);
+            assert(isCancelled, `Failed to cancel order ${orderId}. It maybe got filled while sending the request`);
+
             // Sell 0.02% lower than market price to get an easier fill
             // Note: Test this. this may not be needed for high volume/liquid stocks like FB etc...
             const price = (currentPrice * 0.9998).toFixed(2).toString();
-            return await this.placeOrder(position.quantity, price, symbol, 'sell');
-          }
-          // Increase limit sell price as the current price increases, do not move it if price decreases
-          const newLimit = this.getLimitSellPrice(currentPrice, { overbought });
-          if (newLimit > this.limitSellPrice) {
-            this.limitSellPrice = newLimit;
+            const promise = this.placeOrder(user, numberOfShares, price, symbol, 'sell')
+              .then(order => {
+                rule.set('lastOrderId', order.id);
+                return rule.save();
+              });
+
+            promises.push(promise);
           }
         }
 
-        return Promise.all(innerPromises);
+        /**
+         * Follow price logic
+         */
+        else if (get(trade, 'buyPrice') && get(rule, 'risk.followPrice') && isUptick) {
+          const buyPrice = get(trade, 'buyPrice');
+          const riskPercentage = get(rule, 'risk.percentage');
+          const currentRiskValue = get(rule, 'risk.value');
+          const realizedGainPerc = ((currentPrice - buyPrice) / buyPrice) * 100;
+
+          // Gains are higher than half the risk taken
+          if (realizedGainPerc > riskPercentage / 2) {
+            const newRiskValue = getRiskFromPercentage(currentPrice, riskPercentage);
+            // Increase risk value only if the new risk is higher
+            if (newRiskValue > currentRiskValue) {
+              rule.set('risk.value', newRiskValue);
+
+              promises.push(rule.save());
+            }
+          }
+        }
       });
+
+      await Promise.all(promises);
     } catch (error) {
       console.debug({ error }, 'Error occurred during processFeeds execution');
     }
@@ -187,11 +245,16 @@ class Engine {
    * @returns {Promise.<*>}
    */
   cancelOrder(order) {
+    const orderCancelled = Promise.resolve(true);
+    const orderNotCancelled = Promise.resolve(false);
+
     if (get(order, 'cancel')) {
       console.debug(formatJSON(order, 0), 'Canceling order');
-      return rh.postWithAuth(order.cancel);
+      return rh.postWithAuth(order.cancel)
+        .then(() => orderCancelled)
+        .catch(() => orderNotCancelled);
     }
-    return Promise.resolve();
+    return orderCancelled;
   }
 
   /**
@@ -216,20 +279,6 @@ class Engine {
     };
     console.debug(formatJSON(order, 0), 'Placing order');
     return rh.placeOrder(user, order);
-  }
-
-  /**
-   * Calculates stop loss price based on rule config.
-   * Note: On initialization and oversold indicator the stop loss percentage from the rule is
-   * divided by two in order to minimize risk and maximize profits respectively
-   * @param price
-   * @param options
-   * @returns {number}
-   */
-  getLimitSellPrice(price, options = {}) {
-    const { initial, overbought } = options;
-    const percentage = (initial || overbought) ? rule.riskPercentage / 2 : rule.riskPercentage;
-    return price - (price * (percentage / 100));
   }
 }
 
