@@ -12,7 +12,7 @@ const {
   FIVE_HOURS,
   TEN_MINUTES
 } = require('../services/utils');
-const { Rule, Trade, queries: { getActiveRules, getIncompleteTrades } } = require('../models');
+const { Trade, queries: { getActiveRules, getIncompleteTrades } } = require('../models');
 const rh = require('../services/rhApiService');
 const tv = require('../services/tvApiService');
 
