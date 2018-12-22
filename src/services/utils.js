@@ -58,7 +58,7 @@ const decrypt = (encrypted) => {
  */
 const parsePattern = (pattern = null, quote) => {
   const regex = /{{.+?}}/g;
-  if (pattern && pattern.test(regex)) {
+  if (pattern && pattern.match(regex)) {
     let result = pattern;
     Object.keys(quote).forEach(key => {
       if (result.includes(`{{${key}}}`)) {
