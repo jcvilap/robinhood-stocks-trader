@@ -80,9 +80,9 @@ const log = (toBeLogged, isError = true) => {
   const text = isString(toBeLogged) ? toBeLogged : formatJSON(toBeLogged, 0);
   const options = {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     uri: isError ? SLACK_LOG_ERROR_WEBHOOK_URL : SLACK_LOG_OTHER_WEBHOOK_URL,
     body: { text },
+    json: true,
   };
 
   request(options);

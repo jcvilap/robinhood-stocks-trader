@@ -112,6 +112,11 @@ class Engine {
       const [quotes, trades] = await Promise.all([tv.getQuotes(...symbols), getIncompleteTrades()]);
       const promises = [];
 
+      log(quotes);
+      log(trades, false);
+      log('test log', false);
+      log('test log');
+
       this.rules.forEach(async rule => {
         const user = this.users.find(u => u._id.equals(rule.user._id));
         assert(user, `User ${rule.user._id} not found in rule ${rule._id}`);
