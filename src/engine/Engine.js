@@ -9,8 +9,8 @@ const {
   marketTimes,
   assert,
   parsePattern,
-  formatJSON,
   getRiskFromPercentage,
+  log,
   TEN_SECONDS,
   FIVE_SECONDS,
   FIVE_HOURS,
@@ -36,7 +36,7 @@ class Engine {
       setInterval(() => this.loadRulesAndAccounts(), TEN_SECONDS);
       setInterval(() => this.processFeeds(), FIVE_SECONDS);
     } catch (error) {
-      console.error(error);
+      log(error);
     }
   }
 
@@ -238,7 +238,7 @@ class Engine {
 
       await Promise.all(promises);
     } catch (error) {
-      console.debug({ error }, 'Error occurred during processFeeds execution');
+      log({ error, message: 'Error occurred during processFeeds execution' });
     }
   }
 
@@ -252,7 +252,7 @@ class Engine {
     const orderNotCancelled = Promise.resolve(false);
 
     if (get(order, 'cancel')) {
-      console.debug(formatJSON(order, 0), 'Canceling order');
+      log({ message: 'Canceling order', order }, false);
       return rh.postWithAuth(order.cancel)
         .then(() => orderCancelled)
         .catch(() => orderNotCancelled);
@@ -271,7 +271,7 @@ class Engine {
    */
   placeOrder(user, quantity, price, symbol, side) {
     const order = {
-      account_id: this.account.id,
+      account_id: user.account.id,
       quantity,
       price,
       symbol,
@@ -280,7 +280,7 @@ class Engine {
       type: 'limit',
       ref_id: uuid()
     };
-    console.debug(formatJSON(order, 0), 'Placing order');
+    log({ message: 'Placing order', order }, false);
     return rh.placeOrder(user, order);
   }
 }

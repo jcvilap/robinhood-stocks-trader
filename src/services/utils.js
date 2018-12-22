@@ -1,7 +1,8 @@
 const moment = require('moment');
-const { isNumber } = require('lodash');
+const request = require('request-promise-native');
+const { isNumber, isString } = require('lodash');
 const crypto = require('crypto-js');
-const { APP_SECRET } = require('../config/env');
+const { APP_SECRET, SLACK_LOG_ERROR_WEBHOOK_URL, SLACK_LOG_OTHER_WEBHOOK_URL } = require('../config/env');
 
 
 /**
@@ -22,10 +23,6 @@ const marketTimes = () => {
     isMarketOpen,
     isMarketClosed,
   };
-};
-
-const formatJSON = (json, spaces = 2) => {
-  return JSON.stringify(json, null, spaces);
 };
 
 /**
@@ -73,10 +70,44 @@ const parsePattern = (pattern = null, quote) => {
   return JSON.parse(pattern);
 };
 
-const assert = (object, message, sendEmail = false) => {
+/**
+ * Main app logger. It logs to a Slack channel
+ * @example For setup you Slack app/channel, follow this instructions: https://api.slack.com/incoming-webhooks
+ * @param toBeLogged
+ * @param isError
+ */
+const log = (toBeLogged, isError = true) => {
+  const text = isString(toBeLogged) ? toBeLogged : formatJSON(toBeLogged, 0);
+  const options = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    uri: isError ? SLACK_LOG_ERROR_WEBHOOK_URL : SLACK_LOG_OTHER_WEBHOOK_URL,
+    body: { text },
+  };
+
+  request(options);
+};
+
+/**
+ * Basic JSON formatter
+ * @param json
+ * @param spaces
+ * @returns {string}
+ */
+const formatJSON = (json, spaces = 2) => {
+  return JSON.stringify(json, null, spaces);
+};
+
+/**
+ * Basic assertion function with loggin capabilities
+ * @param object
+ * @param message
+ * @param shouldLog
+ */
+const assert = (object, message, shouldLog = false) => {
   if (!object) {
-    if (sendEmail) {
-      // todo, implement sendEmail functionality and send email with error here
+    if (shouldLog) {
+      log(message);
     }
 
     throw new Error(message);
@@ -97,12 +128,12 @@ const FIVE_HOURS = ONE_HOUR * 5;
 
 module.exports = {
   marketTimes,
-  formatJSON,
   getRiskFromPercentage,
   encrypt,
   decrypt,
   parsePattern,
   assert,
+  log,
   ONE_SECOND,
   FIVE_SECONDS,
   TEN_SECONDS,
