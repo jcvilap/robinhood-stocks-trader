@@ -35,7 +35,7 @@ const formatJSON = (json, spaces = 2) => {
  * @param options
  * @returns {number}
  */
-const  getRiskFromPercentage = (price, riskPercentage, options = {}) => {
+const getRiskFromPercentage = (price, riskPercentage, options = {}) => {
   const { initial, overbought } = options;
   const percentage = (initial || overbought) ? riskPercentage / 2 : riskPercentage;
   return price - (price * (percentage / 100));
@@ -52,7 +52,7 @@ const decrypt = (encrypted) => {
 
 const assert = (object, message, sendEmail = false) => {
   if (!object) {
-    if(sendEmail) {
+    if (sendEmail) {
       // todo, implement sendEmail functionality and send email with error here
     }
 

@@ -25,7 +25,7 @@ class TVService {
         symbols: {
           tickers: [...symbols]
         },
-        columns: ['RSI|1', 'close', 'open', 'MACD.macd', 'MACD.signal', 'EMA30', 'volume']
+        columns: ['RSI|1', 'close|1', 'open|1', 'MACD.macd|1', 'MACD.signal|1', 'EMA30|1', 'volume|1']
       })
     };
 

@@ -2,6 +2,9 @@ const { get, uniq } = require('lodash');
 const { Query } = require('mingo');
 const uuid = require('uuid/v1');
 
+const { Trade, queries: { getActiveRules, getIncompleteTrades } } = require('../models');
+const rh = require('../services/rhApiService');
+const tv = require('../services/tvApiService');
 const {
   marketTimes,
   assert,
@@ -12,9 +15,6 @@ const {
   FIVE_HOURS,
   TEN_MINUTES
 } = require('../services/utils');
-const { Trade, queries: { getActiveRules, getIncompleteTrades } } = require('../models');
-const rh = require('../services/rhApiService');
-const tv = require('../services/tvApiService');
 
 // Todo: move constants to `process.env.js`
 const OVERRIDE_MARKET_CLOSE = true;
@@ -63,7 +63,7 @@ class Engine {
         return rh.auth(user.brokerConfig)
           .then(token => {
             user.token = token;
-            this.userTokens.set(user._id.toString(), { token, date: new Date() })
+            this.userTokens.set(user._id.toString(), { token, date: new Date() });
           });
       }
 
@@ -83,8 +83,8 @@ class Engine {
         return rh.getAccount(user)
           .then(account => {
             user.account = account;
-            this.userAccounts.set(user._id.toString(), { account, date: new Date() })
-          })
+            this.userAccounts.set(user._id.toString(), { account, date: new Date() });
+          });
       }
 
       // Append account
@@ -112,10 +112,13 @@ class Engine {
       const promises = [];
 
       this.rules.forEach(async rule => {
-        const { lastOrderId: orderId, risk, numberOfShares, symbol } = rule;
-
         const user = this.users.find(u => u._id.equals(rule.user._id));
         assert(user, `User ${rule.user._id} not found in rule ${rule._id}`);
+
+        const { lastOrderId, risk, numberOfShares, symbol } = rule;
+        const lastOrder = lastOrderId
+          ? (user.orders.find(({ id }) => id === lastOrderId) || await rh.getOrder(lastOrderId, user))
+          : user.orders.find(o => get(o, 'instrument', '').includes(rule.instrumentId) && o.state === 'filled');
 
         const quote = quotes.find(q => q.symbol === `${rule.exchange}:${rule.symbol}`);
         assert(quote, `Quote for ${rule.symbol} not found`);
@@ -125,7 +128,6 @@ class Engine {
         assert(buyQuery.__criteria || sellQuery.__criteria, `No strategy found for rule ${rule._id}`);
 
         let trade = trades.find(({ ruleId }) => rule._id.equals(ruleId));
-        const lastOrder = orderId && (user.orders.find(({ id }) => id === orderId) || await rh.getOrder(orderId, user));
         const currentPrice = quote.close;
         const isUptick = quote.close > quote.open;
         const isFilled = get(lastOrder, 'state') === 'filled';
@@ -171,7 +173,7 @@ class Engine {
         if (!isRuleActive && buyQuery.test(quote)) {
           // Cancel any pending order
           const isCancelled = await this.cancelOrder(lastOrder);
-          assert(isCancelled, `Failed to cancel order ${orderId}. It maybe got filled while sending the request`);
+          assert(isCancelled, `Failed to cancel order ${lastOrder.id}. It maybe got filled while sending the request`);
 
           // Initially set risk value one half of its original value in the rule
           const riskValue = currentPrice - (currentPrice * ((risk.percentage * 0.5) / 100));
@@ -214,10 +216,10 @@ class Engine {
         /**
          * Follow price logic
          */
-        else if (get(trade, 'buyPrice') && get(rule, 'risk.followPrice') && isUptick) {
+        else if (get(trade, 'buyPrice') && rule.risk.followPrice && isUptick) {
           const buyPrice = get(trade, 'buyPrice');
-          const riskPercentage = get(rule, 'risk.percentage');
-          const currentRiskValue = get(rule, 'risk.value');
+          const riskPercentage = rule.risk.percentage;
+          const currentRiskValue = rule.risk.value;
           const realizedGainPerc = ((currentPrice - buyPrice) / buyPrice) * 100;
 
           // Gains are higher than half the risk taken

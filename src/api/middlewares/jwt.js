@@ -3,10 +3,10 @@ const { verifyJWTToken } = require('./auth');
 module.exports = async (request, response, next) => {
   const token = request.headers['authorization'];
 
-  if(token) {
+  if (token) {
     try {
       const isValid = await verifyJWTToken(token);
-      if(isValid) next();
+      if (isValid) next();
       else {
         response.status(401).send({
           status: 401,

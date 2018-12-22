@@ -6,7 +6,7 @@ class MailService {
     this.transport = createTransport(transport);
   }
 
-  send({ from, to, subject, text}) {
+  send({ from, to, subject, text }) {
     return this.transport.sendMail({
       ...options,
       from,

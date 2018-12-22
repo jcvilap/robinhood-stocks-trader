@@ -5,40 +5,40 @@ const Rule = new mongoose.Schema({
    * Stock symbol
    * @example 'SNAP'
    */
-  symbol: {type: String, required: true, index: true},
+  symbol: { type: String, required: true, index: true },
   /**
    * Market exchange
    * @example 'NYSE'
    */
-  exchange: {type: String, required: true},
+  exchange: { type: String, required: true },
   /**
    * Instrument id in RB
    */
-  instrumentId: {type: String, required: true},
+  instrumentId: { type: String, required: true },
   /**
    * User id
    */
-  user: {type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true},
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   /**
    * Last filled order id
    */
-  lastOrderId: {type: String},
+  lastOrderId: { type: String },
   /**
    * Number of shares to trade
    */
-  numberOfShares: {type: Number, required: true},
+  numberOfShares: { type: Number, required: true },
   /**
    * Number of winning trades
    */
-  negativeTrades: {type: Number, default: 0},
+  negativeTrades: { type: Number, default: 0 },
   /**
    * Number of losing trades
    */
-  positiveTrades: {type: Number, default: 0},
+  positiveTrades: { type: Number, default: 0 },
   /**
    * Rule enabled flag
    */
-  enabled: {type: Boolean, index: true},
+  enabled: { type: Boolean, index: true },
   /**
    * Risk management
    */
@@ -47,11 +47,11 @@ const Rule = new mongoose.Schema({
      * If true, the limit risk will follow the price, else, it will stay
      * as a getRiskPercentage of the initial value
      */
-    followPrice: Boolean,
-    /**
+    followPrice: { type: Boolean, default: true },
+    /**k
      * Percentage of the initial value to risk off
      */
-    getRiskPercentage: Number,
+    percentage: { type: Number, default: 1 },
     /**
      * Current limit calculate value(stock price)
      */
@@ -61,11 +61,11 @@ const Rule = new mongoose.Schema({
     /**
      * Pattern to enter a trade
      */
-    in: {type: mongoose.Schema.Types.ObjectId, ref: 'Pattern'},
+    in: { type: mongoose.Schema.Types.ObjectId, ref: 'Pattern' },
     /**
      * Pattern to exit a trade
      */
-    out: {type: mongoose.Schema.Types.ObjectId, ref: 'Pattern'},
+    out: { type: mongoose.Schema.Types.ObjectId, ref: 'Pattern' },
   }
 });
 
