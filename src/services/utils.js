@@ -50,6 +50,27 @@ const decrypt = (encrypted) => {
   return bytes.toString(crypto.enc.Utf8);
 };
 
+/**
+ * Replaces quote values in pattern string and then parses the string into an object
+ * @param pattern
+ * @param quote
+ * @returns {any}
+ */
+const parsePattern = (pattern = null, quote) => {
+  const regex = /{{.+?}}/g;
+  if (pattern && pattern.test(regex)) {
+    let result = pattern;
+    Object.keys(quote).forEach(key => {
+      if (result.includes(`{{${key}}}`)) {
+          result = result.replace(`{{${key}}}`, quote[key]);
+      }
+    });
+    return JSON.parse(result);
+  }
+
+  return JSON.parse(pattern);
+};
+
 const assert = (object, message, sendEmail = false) => {
   if (!object) {
     if (sendEmail) {
@@ -78,6 +99,7 @@ module.exports = {
   getRiskFromPercentage,
   encrypt,
   decrypt,
+  parsePattern,
   assert,
   ONE_SECOND,
   FIVE_SECONDS,

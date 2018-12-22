@@ -36,8 +36,8 @@ class TVService {
         close: Number(s.d[1]),
         open: Number(s.d[2]),
         diff: Number(s.d[1]) - Number(s.d[2]),
-        macd: Number(s.d[3]),
-        macdSignal: Number(s.d[4]),
+        macd: Number(s.d[3]),         // <-- blue line
+        macdSignal: Number(s.d[4]),   // <-- yellow line
         ema: Number(s.d[5]),
         volume: Number(s.d[6]),
       })));

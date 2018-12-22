@@ -8,6 +8,7 @@ const tv = require('../services/tvApiService');
 const {
   marketTimes,
   assert,
+  parsePattern,
   formatJSON,
   getRiskFromPercentage,
   TEN_SECONDS,
@@ -123,8 +124,8 @@ class Engine {
         const quote = quotes.find(q => q.symbol === `${rule.exchange}:${rule.symbol}`);
         assert(quote, `Quote for ${rule.symbol} not found`);
 
-        const buyQuery = new Query(JSON.parse(get(rule, 'strategy.in.query', null)));
-        const sellQuery = new Query(JSON.parse(get(rule, 'strategy.out.query', null)));
+        const buyQuery = new Query(parsePattern(get(rule, 'strategy.in.query'), quote));
+        const sellQuery = new Query(parsePattern(get(rule, 'strategy.out.query'), quote));
         assert(buyQuery.__criteria || sellQuery.__criteria, `No strategy found for rule ${rule._id}`);
 
         let trade = trades.find(({ ruleId }) => rule._id.equals(ruleId));
@@ -198,7 +199,7 @@ class Engine {
           if (riskPriceReached || sellQuery.test(quote)) {
             // Cancel any pending order
             const isCancelled = await this.cancelOrder(lastOrder);
-            assert(isCancelled, `Failed to cancel order ${orderId}. It maybe got filled while sending the request`);
+            assert(isCancelled, `Failed to cancel order ${lastOrder.id}. It maybe got filled while sending the request`);
 
             // Sell 0.02% lower than market price to get an easier fill
             // Note: Test this. this may not be needed for high volume/liquid stocks like FB etc...
