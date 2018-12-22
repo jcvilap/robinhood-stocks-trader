@@ -1,4 +1,5 @@
 const moment = require('moment');
+const { isNumber } = require('lodash');
 const crypto = require('crypto-js');
 const { APP_SECRET } = require('../config/env');
 
@@ -62,7 +63,8 @@ const parsePattern = (pattern = null, quote) => {
     let result = pattern;
     Object.keys(quote).forEach(key => {
       if (result.includes(`{{${key}}}`)) {
-          result = result.replace(`{{${key}}}`, quote[key]);
+          const toBeReplaced = isNumber(quote[key]) ? `"{{${key}}}"` : `{{${key}}}`;
+          result = result.replace(toBeReplaced, quote[key]);
       }
     });
     return JSON.parse(result);
