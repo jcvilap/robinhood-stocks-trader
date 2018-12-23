@@ -12,9 +12,14 @@ const Rule = new mongoose.Schema({
    */
   exchange: { type: String, required: true },
   /**
-   * Instrument id in RB
+   * Override 3 day-trade per week US rule
+   */
+  overrideDayTradeChecks: { type: Boolean, default: false },
+  /**
+   * Instrument in RB
    */
   instrumentId: { type: String, required: true },
+  instrumentUrl : { type: String, required: true },
   /**
    * User id
    */

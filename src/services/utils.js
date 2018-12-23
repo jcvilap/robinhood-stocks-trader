@@ -1,9 +1,12 @@
 const moment = require('moment');
-const request = require('request-promise-native');
 const { isNumber, isString } = require('lodash');
 const crypto = require('crypto-js');
+const { IncomingWebhook } = require('@slack/client');
+
 const { APP_SECRET, SLACK_LOG_ERROR_WEBHOOK_URL, SLACK_LOG_OTHER_WEBHOOK_URL } = require('../config/env');
 
+const errorLogger = new IncomingWebhook(SLACK_LOG_ERROR_WEBHOOK_URL);
+const logger = new IncomingWebhook(SLACK_LOG_OTHER_WEBHOOK_URL);
 
 /**
  * US Stock Market standard hours
@@ -77,15 +80,8 @@ const parsePattern = (pattern = null, quote) => {
  * @param isError
  */
 const log = (toBeLogged, isError = true) => {
-  const text = isString(toBeLogged) ? toBeLogged : formatJSON(toBeLogged, 0);
-  const options = {
-    method: 'POST',
-    uri: isError ? SLACK_LOG_ERROR_WEBHOOK_URL : SLACK_LOG_OTHER_WEBHOOK_URL,
-    body: { text },
-    json: true,
-  };
-
-  request(options);
+  const message = isString(toBeLogged) ? toBeLogged : formatJSON(toBeLogged, 0);
+  isError ? errorLogger.send(message) : logger.send(message);
 };
 
 /**
