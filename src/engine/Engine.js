@@ -1,4 +1,4 @@
-const { get, uniq, round } = require('lodash');
+const { get, uniqBy, round } = require('lodash');
 const { Query } = require('mingo');
 const uuid = require('uuid/v1');
 
@@ -59,7 +59,7 @@ class Engine {
     // Fetch fresh rules
     this.rules = await getActiveRules();
     // Fetch fresh users
-    this.users = uniq(this.rules.map(rule => rule.user.toObject()));
+    this.users = uniqBy(this.rules.map(rule => ({ ...rule.user.toObject(), _id: rule.user._id.toString() })), '_id');
 
     // Store all user tokens for authentication
     const tokenPromises = this.users.map(user => {
