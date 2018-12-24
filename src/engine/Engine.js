@@ -5,12 +5,12 @@ const uuid = require('uuid/v1');
 const { Trade, queries: { getActiveRules, getIncompleteTrades } } = require('../models');
 const rh = require('../services/rhApiService');
 const tv = require('../services/tvApiService');
+const logger = require('../services/logService');
 const {
   marketTimes,
   assert,
   parsePattern,
   getRiskFromPercentage,
-  log,
   TEN_SECONDS,
   FIVE_SECONDS,
   FIVE_HOURS,
@@ -18,7 +18,7 @@ const {
 } = require('../services/utils');
 
 // Todo: move constants to `process.env.js`
-const OVERRIDE_MARKET_CLOSE = false;
+const OVERRIDE_MARKET_CLOSE = true;
 
 class Engine {
   constructor() {
@@ -36,7 +36,7 @@ class Engine {
       setInterval(() => this.loadRulesAndAccounts(), TEN_SECONDS);
       setInterval(() => this.processFeeds(), FIVE_SECONDS);
     } catch (error) {
-      log(error);
+      logger.error(error);
     }
   }
 
@@ -244,7 +244,7 @@ class Engine {
 
       await Promise.all(promises);
     } catch (error) {
-      log({ error, message: 'Error occurred during processFeeds execution' });
+      logger.error(error);
     }
   }
 
@@ -260,13 +260,13 @@ class Engine {
 
     if (get(order, 'cancel')) {
       return rh.postWithAuth(user, order.cancel)
-        .then(resp => {
-          log({ message: '*Order Cancelled* =>', ...resp, ...order }, false);
-          return orderCancelled
+        .then(() => {
+          logger.orderCanceled(order);
+          return orderCancelled;
         })
         .catch(error => {
-          log({ message: '*Failed to cancel order* =>', ...error, ...order });
-          return orderNotCancelled
+          logger.error(error);
+          return orderNotCancelled;
         });
     }
     return orderCancelled;
@@ -299,7 +299,7 @@ class Engine {
 
     return rh.placeOrder(user, options)
       .then(order => {
-        log({ message: '*Order Placed* =>', order }, false);
+        logger.orderPlaced(order);
         return order;
       });
   }

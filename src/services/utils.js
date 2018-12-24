@@ -1,12 +1,8 @@
 const moment = require('moment');
-const { isNumber, isString } = require('lodash');
+const { isNumber } = require('lodash');
 const crypto = require('crypto-js');
-const { IncomingWebhook } = require('@slack/client');
 
-const { APP_SECRET, SLACK_LOG_ERROR_WEBHOOK_URL, SLACK_LOG_OTHER_WEBHOOK_URL } = require('../config/env');
-
-const errorLogger = new IncomingWebhook(SLACK_LOG_ERROR_WEBHOOK_URL);
-const logger = new IncomingWebhook(SLACK_LOG_OTHER_WEBHOOK_URL);
+const { APP_SECRET } = require('../config/env');
 
 /**
  * US Stock Market standard hours
@@ -74,17 +70,6 @@ const parsePattern = (pattern = null, quote) => {
 };
 
 /**
- * Main app logger. It logs to a Slack channel
- * @example For setup you Slack app/channel, follow this instructions: https://api.slack.com/incoming-webhooks
- * @param toBeLogged
- * @param isError
- */
-const log = (toBeLogged, isError = true) => {
-  const message = isString(toBeLogged) ? toBeLogged : formatJSON(toBeLogged, 0);
-  isError ? errorLogger.send(message) : logger.send(message);
-};
-
-/**
  * Basic JSON formatter
  * @param json
  * @param spaces
@@ -129,7 +114,7 @@ module.exports = {
   decrypt,
   parsePattern,
   assert,
-  log,
+  formatJSON,
   ONE_SECOND,
   FIVE_SECONDS,
   TEN_SECONDS,
