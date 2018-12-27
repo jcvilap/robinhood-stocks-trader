@@ -14,7 +14,7 @@ class LogService {
     const message = isString(toBeLogged) ? toBeLogged : formatJSON(toBeLogged, 0);
     const errorMsg = isString(error) ? error : formatJSON(error, 0);
     this.errorLogger.send(`*${message}* ${errorMsg}`);
-    console.log(`*${message}* ${errorMsg}`);
+    console.log(`*${message}* ${errorMsg}`.trim());
   }
 
   orderPlaced(order) {

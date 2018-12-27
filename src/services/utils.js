@@ -10,8 +10,8 @@ const { APP_SECRET } = require('../config/env');
  */
 const marketTimes = () => {
   // Calculate hours in UTC
-  const marketOpensAt = moment().utc().set({ hour: 13, minute: 30, second: 0 }); // 9:30 AM
-  const marketClosesAt = moment().utc().set({ hour: 20, minute: 0, second: 0 }); // 4:00 PM
+  const marketOpensAt = moment().utc().set({ hour: 14, minute: 30, second: 0 }); // 9:30 AM
+  const marketClosesAt = moment().utc().set({ hour: 21, minute: 0, second: 0 }); // 4:00 PM
   const isWeekday = ![6, 7].includes(moment().isoWeekday());
   const isMarketOpen = moment().isBetween(marketOpensAt, marketClosesAt) && isWeekday;
   const isMarketClosed = !isMarketOpen;
@@ -75,8 +75,11 @@ const parsePattern = (pattern = null, quote) => {
  * @param spaces
  * @returns {string}
  */
-const formatJSON = (json, spaces = 2) => {
-  return JSON.stringify(json, null, spaces);
+const formatJSON = (json = {}, spaces = 2) => {
+  const withStringify = JSON.stringify(json, null, spaces);
+  const withToString = json.toString ? json.toString() : '';
+
+  return withStringify !== '{}' ? withStringify : withToString;
 };
 
 /**

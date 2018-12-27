@@ -1,4 +1,4 @@
-const { get, uniqBy, round } = require('lodash');
+const { get, uniqBy, uniq, round } = require('lodash');
 const { Query } = require('mingo');
 const uuid = require('uuid/v1');
 
@@ -18,7 +18,7 @@ const {
 } = require('../services/utils');
 
 // Todo: move constants to `process.env.js`
-const OVERRIDE_MARKET_CLOSE = true;
+const OVERRIDE_MARKET_CLOSE = false;
 
 class Engine {
   constructor() {
@@ -178,13 +178,14 @@ class Engine {
          * BUY pattern
          */
         if (!isRuleActive && buyQuery.test(quote)) {
+          const patternName = get(rule, 'strategy.in.query.name');
           // Cancel any pending order
           const isCancelled = await this.cancelOrder(user, lastOrder);
           assert(isCancelled, `Failed to cancel order ${lastOrder.id}. It maybe got filled while sending the request`);
 
           // Initially set risk value one half of its original value in the rule
           const riskValue = currentPrice - (currentPrice * ((risk.percentage * 0.5) / 100));
-          const promise = this.placeOrder(user, numberOfShares, currentPrice, symbol, 'buy', rule)
+          const promise = this.placeOrder(user, numberOfShares, currentPrice, symbol, 'buy', rule, patternName)
             .then(order => {
               rule.set('lastOrderId', order.id);
               rule.set('risk.value', riskValue);
@@ -203,6 +204,7 @@ class Engine {
 
           // Stop loss reached or sell pattern matches, trigger sell
           if (riskPriceReached || sellQuery.test(quote)) {
+            const patternName = sellQuery.test(quote) ? get(rule, 'strategy.out.query.name') : 'Risk reached';
             // Cancel any pending order
             const isCancelled = await this.cancelOrder(lastOrder);
             assert(isCancelled, `Failed to cancel order ${lastOrder.id}. It maybe got filled while sending the request`);
@@ -210,7 +212,7 @@ class Engine {
             // Sell 0.02% lower than market price to get an easier fill
             // Note: Test this. this may not be needed for high volume/liquid stocks like FB etc...
             const price = (currentPrice * 0.9998).toFixed(2).toString();
-            const promise = this.placeOrder(user, numberOfShares, price, symbol, 'sell')
+            const promise = this.placeOrder(user, numberOfShares, price, symbol, 'sell', rule, patternName)
               .then(order => {
                 rule.set('lastOrderId', order.id);
                 return rule.save();
@@ -280,9 +282,10 @@ class Engine {
    * @param symbol
    * @param side
    * @param rule
+   * @param patternName
    * @returns {*}
    */
-  placeOrder(user, quantity, price, symbol, side, rule) {
+  placeOrder(user, quantity, price, symbol, side, rule, patternName) {
     const options = {
       account: get(user, 'account.url', null),
       quantity,
@@ -299,7 +302,7 @@ class Engine {
 
     return rh.placeOrder(user, options)
       .then(order => {
-        logger.orderPlaced(order);
+        logger.orderPlaced({ patternName, ...order});
         return order;
       });
   }
