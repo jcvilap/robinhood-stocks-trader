@@ -18,7 +18,7 @@ const {
 } = require('../services/utils');
 
 // Todo: move constants to `process.env.js`
-const OVERRIDE_MARKET_CLOSE = false;
+const OVERRIDE_MARKET_CLOSE = true;
 
 class Engine {
   constructor() {
@@ -103,7 +103,8 @@ class Engine {
     const orderPromises = this.users.map(user => rh.getOrders(user)
       .then(orders => user.orders = orders));
 
-    await Promise.all(accountPromises.concat(orderPromises));
+    await Promise.all(accountPromises.concat(orderPromises))
+      .catch(error => logger.error(error));
   }
 
   async processFeeds() {
@@ -119,13 +120,16 @@ class Engine {
       const promises = [];
 
       this.rules.forEach(async rule => {
-        const user = this.users.find(u => u._id.equals(rule.user._id));
+        const user = this.users.find(u => rule.user._id.equals(u._id));
         assert(user, `User ${rule.user._id} not found in rule ${rule._id}`);
+
+        const orders = user.orders || await rh.getOrders(user);
+        assert(orders, `Orders not found for user ${user._id}`);
 
         const { lastOrderId, risk, numberOfShares, symbol } = rule;
         const lastOrder = lastOrderId
-          ? (user.orders.find(({ id }) => id === lastOrderId) || await rh.getOrder(lastOrderId, user))
-          : user.orders.find(o => get(o, 'instrument', '').includes(rule.instrumentId) && o.state === 'filled');
+          ? (orders.find(({ id }) => id === lastOrderId) || await rh.getOrder(lastOrderId, user))
+          : orders.find(o => get(o, 'instrument', '').includes(rule.instrumentId) && o.state === 'filled');
 
         const quote = quotes.find(q => q.symbol === `${rule.exchange}:${rule.symbol}`);
         assert(quote, `Quote for ${rule.symbol} not found`);
@@ -198,7 +202,7 @@ class Engine {
         /**
          * SELL pattern
          */
-        else if (!isRuleInactive) {
+        else if (isRuleActive) {
           const riskValue = get(rule, 'risk.value');
           const riskPriceReached = riskValue > currentPrice;
 
@@ -244,7 +248,7 @@ class Engine {
         }
       });
 
-      await Promise.all(promises);
+      await Promise.all(promises).catch(error => logger.error(error));;
     } catch (error) {
       logger.error(error);
     }
@@ -304,7 +308,8 @@ class Engine {
       .then(order => {
         logger.orderPlaced({ patternName, ...order});
         return order;
-      });
+      })
+      .catch(error => logger.error(error));
   }
 }
 
