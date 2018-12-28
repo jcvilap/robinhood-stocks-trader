@@ -1,6 +1,5 @@
-const { get, uniqBy, uniq, round } = require('lodash');
+const { get, uniqBy, uniq, round, isString } = require('lodash');
 const { Query } = require('mingo');
-const uuid = require('uuid/v1');
 
 const { Trade, queries: { getActiveRules, getIncompleteTrades } } = require('../models');
 const rh = require('../services/rhApiService');
@@ -18,7 +17,7 @@ const {
 } = require('../services/utils');
 
 // Todo: move constants to `process.env.js`
-const OVERRIDE_MARKET_CLOSE = true;
+const OVERRIDE_MARKET_CLOSE = false;
 
 class Engine {
   constructor() {
@@ -31,7 +30,7 @@ class Engine {
   async start() {
     try {
       await this.loadRulesAndAccounts();
-      await this.processFeeds();
+      await this.detectIntervalChange();
 
       setInterval(() => this.loadRulesAndAccounts(), TEN_SECONDS);
       setInterval(() => this.processFeeds(), FIVE_SECONDS);
@@ -99,9 +98,12 @@ class Engine {
       return null;
     }).filter(a => a);
 
-    // Append fresh user orders
-    const orderPromises = this.users.map(user => rh.getOrders(user)
-      .then(orders => user.orders = orders));
+    // Append rule orders by refId
+    const orderPromises = this.rules.map(rule => {
+      const user = this.users.find(({ _id }) => rule.user._id.equals(_id));
+      return this.getRuleOrders(user, rule)
+        .then(orders => rule.orders = orders);
+    });
 
     await Promise.all(accountPromises.concat(orderPromises))
       .catch(error => logger.error(error));
@@ -123,13 +125,17 @@ class Engine {
         const user = this.users.find(u => rule.user._id.equals(u._id));
         assert(user, `User ${rule.user._id} not found in rule ${rule._id}`);
 
-        const orders = user.orders || await rh.getOrders(user);
-        assert(orders, `Orders not found for user ${user._id}`);
+        const orders = rule.orders || await this.getRuleOrders(user, rule);
+        assert(orders, `Orders not found for rule ${rule._id}`);
+        rule.orders = orders;
 
         const { lastOrderId, risk, numberOfShares, symbol } = rule;
         const lastOrder = lastOrderId
           ? (orders.find(({ id }) => id === lastOrderId) || await rh.getOrder(lastOrderId, user))
-          : orders.find(o => get(o, 'instrument', '').includes(rule.instrumentId) && o.state === 'filled');
+          : null;
+        const lastFilledOrder = get(lastOrder, 'state') === 'filled'
+          ? lastOrder
+          : orders.find(({ state }) => state === 'filled');
 
         const quote = quotes.find(q => q.symbol === `${rule.exchange}:${rule.symbol}`);
         assert(quote, `Quote for ${rule.symbol} not found`);
@@ -141,16 +147,16 @@ class Engine {
         let trade = trades.find(({ ruleId }) => rule._id.equals(ruleId));
         const currentPrice = quote.close;
         const isUptick = quote.close > quote.open;
-        const isFilled = get(lastOrder, 'state') === 'filled';
-        const isSell = get(lastOrder, 'side') === 'sell';
-        const isBuy = get(lastOrder, 'side') === 'buy';
-        const isRuleActive = isBuy && isFilled;
-        const isRuleInactive = isSell && isFilled;
+        const isSell = get(lastFilledOrder, 'side') === 'sell';
+        const isBuy = get(lastFilledOrder, 'side') === 'buy';
+        const riskValue = get(rule, 'risk.value');
+        const riskPriceReached = riskValue > currentPrice;
 
         /**
-         * Trade management
+         * Trade management.
+         * Last order got filled, update trade
          */
-        if (isFilled) {
+        if (lastFilledOrder === lastOrder) {
           // Last order is a buy and no trade has been initiated, create one
           if (isBuy && !trade) {
             trade = new Trade({
@@ -181,19 +187,21 @@ class Engine {
         /**
          * BUY pattern
          */
-        if (!isRuleActive && buyQuery.test(quote)) {
-          const patternName = get(rule, 'strategy.in.query.name');
+        if ((isSell || !lastFilledOrder) && buyQuery.test(quote)) {
+          const patternName = get(rule, 'strategy.in.name');
           // Cancel any pending order
           const isCancelled = await this.cancelOrder(user, lastOrder);
-          assert(isCancelled, `Failed to cancel order ${lastOrder.id}. It maybe got filled while sending the request`);
+          assert(isCancelled, `Failed to cancel order ${get(lastOrder, 'id')}. It maybe got filled while sending the request`);
 
           // Initially set risk value one half of its original value in the rule
           const riskValue = currentPrice - (currentPrice * ((risk.percentage * 0.5) / 100));
           const promise = this.placeOrder(user, numberOfShares, currentPrice, symbol, 'buy', rule, patternName)
             .then(order => {
-              rule.set('lastOrderId', order.id);
-              rule.set('risk.value', riskValue);
-              return rule.save();
+              if (get(order, 'id')) {
+                rule.set('lastOrderId', order.id);
+                rule.set('risk.value', riskValue);
+                return rule.save();
+              }
             });
 
           promises.push(promise);
@@ -202,34 +210,28 @@ class Engine {
         /**
          * SELL pattern
          */
-        else if (isRuleActive) {
-          const riskValue = get(rule, 'risk.value');
-          const riskPriceReached = riskValue > currentPrice;
+        else if (isBuy && (riskPriceReached || sellQuery.test(quote))) {
+          const patternName = sellQuery.test(quote) ? get(rule, 'strategy.out.name') : 'Risk reached';
+          // Cancel any pending order
+          const isCancelled = await this.cancelOrder(lastOrder);
+          assert(isCancelled, `Failed to cancel order ${lastOrder.id}. It maybe got filled while sending the request`);
 
-          // Stop loss reached or sell pattern matches, trigger sell
-          if (riskPriceReached || sellQuery.test(quote)) {
-            const patternName = sellQuery.test(quote) ? get(rule, 'strategy.out.query.name') : 'Risk reached';
-            // Cancel any pending order
-            const isCancelled = await this.cancelOrder(lastOrder);
-            assert(isCancelled, `Failed to cancel order ${lastOrder.id}. It maybe got filled while sending the request`);
+          // Sell 0.02% lower than market price to get an easier fill
+          // Note: Test this. this may not be needed for high volume/liquid stocks like FB etc...
+          const price = (currentPrice * 0.9998).toFixed(2).toString();
+          const promise = this.placeOrder(user, numberOfShares, price, symbol, 'sell', rule, patternName)
+            .then(order => {
+              rule.set('lastOrderId', order.id);
+              return rule.save();
+            });
 
-            // Sell 0.02% lower than market price to get an easier fill
-            // Note: Test this. this may not be needed for high volume/liquid stocks like FB etc...
-            const price = (currentPrice * 0.9998).toFixed(2).toString();
-            const promise = this.placeOrder(user, numberOfShares, price, symbol, 'sell', rule, patternName)
-              .then(order => {
-                rule.set('lastOrderId', order.id);
-                return rule.save();
-              });
-
-            promises.push(promise);
-          }
+          promises.push(promise);
         }
 
         /**
          * Follow price logic
          */
-        else if (get(trade, 'buyPrice') && rule.risk.followPrice && isUptick) {
+        else if (isBuy && get(trade, 'buyPrice') && rule.risk.followPrice && isUptick) {
           const buyPrice = get(trade, 'buyPrice');
           const riskPercentage = rule.risk.percentage;
           const currentRiskValue = rule.risk.value;
@@ -248,7 +250,7 @@ class Engine {
         }
       });
 
-      await Promise.all(promises).catch(error => logger.error(error));;
+      await Promise.all(promises).catch(error => logger.error(error));
     } catch (error) {
       logger.error(error);
     }
@@ -256,11 +258,12 @@ class Engine {
 
   /**
    * Helper function to cancel last order ONLY if it exists
+   * @note Move into a helper service
    * @param user
    * @param order
    * @returns {Promise.<*>}
    */
-  cancelOrder(user, order) {
+  cancelOrder(user, order = {}) {
     const orderCancelled = Promise.resolve(true);
     const orderNotCancelled = Promise.resolve(false);
 
@@ -280,6 +283,7 @@ class Engine {
 
   /**
    * Helper function to place an order
+   * @note Move into a helper service
    * @param user
    * @param quantity
    * @param price
@@ -301,15 +305,49 @@ class Engine {
       type: 'limit',
       trigger: 'immediate',
       override_day_trade_checks: rule.overrideDayTradeChecks,
-      ref_id: uuid()
+      ref_id: rule.UUID()
     };
 
     return rh.placeOrder(user, options)
       .then(order => {
-        logger.orderPlaced({ patternName, ...order});
+        logger.orderPlaced({ patternName, ...order });
         return order;
       })
       .catch(error => logger.error(error));
+  }
+
+  /**
+   * Helper function to fetch orders associated with a rule
+   * @note Move into a helper service
+   * @param user
+   * @param rule
+   * @returns {Promise<PromiseLike | never>}
+   */
+  getRuleOrders(user, rule) {
+    return rh.getOrders(user)
+      .catch(error => logger.error(error))
+      .then((orders = []) => orders
+        .filter(o => isString(o.ref_id) && o.ref_id.endsWith(rule.refId)));
+  }
+
+  /**
+   * Awaits until a change in the quote's price is detected
+   * @returns {Promise<void>}
+   */
+  async detectIntervalChange() {
+    let prices = null;
+    let changeDetected = false;
+    while (!changeDetected) {
+      const symbols = uniq(this.rules.map(r => `${r.exchange}:${r.symbol}`));
+      const quotes = await tv.getQuotes(...symbols);
+      const currentPrices = quotes.map(quote => quote.close);
+
+      if (!prices) {
+        prices = currentPrices;
+      }
+
+      changeDetected = currentPrices !== prices;
+    }
   }
 }
 

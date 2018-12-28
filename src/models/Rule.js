@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const uuid = require('uuid/v1');
 
 const Rule = new mongoose.Schema({
   /**
@@ -28,6 +29,10 @@ const Rule = new mongoose.Schema({
    * Last filled order id
    */
   lastOrderId: { type: String },
+  /**
+   * Reference uuid to give the broker. User to filter orders
+   */
+  refId: { type: String },
   /**
    * Number of shares to trade
    */
@@ -73,6 +78,35 @@ const Rule = new mongoose.Schema({
     out: { type: mongoose.Schema.Types.ObjectId, ref: 'Pattern' },
   }
 });
+
+// region HOOKS
+Rule.post('save', async function(doc) {
+  if (doc._id && !(doc.refId && doc._id.toString().startsWith(doc.refId))) {
+    const refId = doc._id.toString().substr(0, 12);
+    doc.set('refId', refId);
+
+    await doc.save();
+  }
+});
+// endregion
+
+// region METHODS
+/**
+ * Generates UUID bound to rule
+ * @return {string|null}
+ */
+Rule.methods.UUID = function() {
+  if (this.refId) {
+    const uuidParts = uuid().toString().split('-');
+    const lastIndex = uuidParts.length - 1;
+    uuidParts[lastIndex] = this.refId;
+
+    return uuidParts.join('-');
+  }
+
+  return null;
+};
+// endregion
 
 
 module.exports = mongoose.model('Rule', Rule);

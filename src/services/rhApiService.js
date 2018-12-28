@@ -1,4 +1,5 @@
 const request = require('request-promise-native');
+const querystring = require('querystring');
 const { RBH_API_BASE } = require('../config/env');
 const Utils = require('../services/utils');
 
@@ -45,13 +46,14 @@ class RHService {
    * Retrieves all orders for account
    * @returns {Promise}
    */
-  getOrders({ token }) {
+  getOrders({ token }, filters) {
+    const query = filters ? `?${querystring.stringify(filters)}` : '';
     const options = {
       ...common,
       headers: {
         Authorization: token,
       },
-      uri: `${RBH_API_BASE}/orders/`,
+      uri: `${RBH_API_BASE}/orders/${query}`,
     };
     return request(options)
       .then(({ results }) => results);

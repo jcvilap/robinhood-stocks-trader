@@ -1,7 +1,7 @@
 const { Rule } = require('./../../models');
 
 module.exports = async (request, response) => {
-  const { filter, page = '1', sort = '{ "id": "desc" }', max = '1' } = request.query;
+  const { filter = '{}', page = '1', sort = '{ "id": "desc" }', max = '100' } = request.query;
   const searchQuery = {};
   const search = JSON.parse(filter);
 
