@@ -27,4 +27,13 @@ const Trade = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 });
 
+Trade.index(
+  { rule: 1, completed: 1 },
+  {
+    name: 'unique_incomplete_trade_rule',
+    unique: true,
+    partialFilterExpression: { completed: false },
+  }
+);
+
 module.exports = mongoose.model('Trade', Trade);
