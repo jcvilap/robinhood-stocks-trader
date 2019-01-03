@@ -144,7 +144,7 @@ class Engine {
         const sellQuery = new Query(parsePattern(get(rule, 'strategy.out.query'), quote));
         assert(buyQuery.__criteria || sellQuery.__criteria, `No strategy found for rule ${rule._id}`);
 
-        let trade = trades.find(({ ruleId }) => rule._id.equals(ruleId));
+        let trade = trades.find(({ rule }) => rule._id.equals(rule));
         const currentPrice = quote.close;
         const isUptick = quote.close > quote.open;
         const isSell = get(lastFilledOrder, 'side') === 'sell';
@@ -156,7 +156,14 @@ class Engine {
          * Trade management.
          * Last order got filled, update trade
          */
-        if (lastFilledOrder === lastOrder) {
+
+        // NOTE FOR ME: on the only rule that is enabled I made the mistake to manually sell the
+        // stock it bought. Therefore, it thinks that the rule has an active order. Fix for tomorrow:
+        // Manually buy a share and leave this rule work for a while. Then continue debugging.
+
+        // After this rule looks ok, try the other two rules individually before putting them all to work
+
+        if (lastFilledOrder && lastFilledOrder === lastOrder) {
           // Last order is a buy and no trade has been initiated, create one
           if (isBuy && !trade) {
             trade = new Trade({
@@ -214,7 +221,7 @@ class Engine {
           const patternName = sellQuery.test(quote) ? get(rule, 'strategy.out.name') : 'Risk reached';
           // Cancel any pending order
           const isCancelled = await this.cancelOrder(lastOrder);
-          assert(isCancelled, `Failed to cancel order ${lastOrder.id}. It maybe got filled while sending the request`);
+          assert(isCancelled, `Failed to cancel order ${get(lastOrder, 'id', '')}`);
 
           // Sell 0.02% lower than market price to get an easier fill
           // Note: Test this. this may not be needed for high volume/liquid stocks like FB etc...
@@ -313,7 +320,10 @@ class Engine {
         logger.orderPlaced({ patternName, ...order });
         return order;
       })
-      .catch(error => logger.error(error));
+      .catch(error => {
+        logger.error(error);
+        throw new Error(error);
+      });
   }
 
   /**

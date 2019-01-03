@@ -51,9 +51,14 @@ const decrypt = (encrypted) => {
  * Replaces quote values in pattern string and then parses the string into an object
  * @param pattern
  * @param quote
- * @returns {any}
+ * @returns {Object}
  */
 const parsePattern = (pattern = null, quote) => {
+  if (!pattern) {
+    // Non matching query
+    return { __invalidField__: { $exists: true } };
+  }
+
   const regex = /{{.+?}}/g;
   if (pattern && pattern.match(regex)) {
     let result = pattern;
