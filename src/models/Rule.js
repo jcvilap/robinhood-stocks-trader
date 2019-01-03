@@ -77,7 +77,7 @@ const Rule = new mongoose.Schema({
      */
     out: { type: mongoose.Schema.Types.ObjectId, ref: 'Pattern' },
   }
-});
+}, { versionKey: false });
 
 // region HOOKS
 Rule.post('save', async function(doc) {

@@ -25,7 +25,7 @@ const Trade = new mongoose.Schema({
    * User id
    */
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-});
+}, { versionKey: false });
 
 Trade.index(
   { rule: 1, completed: 1 },

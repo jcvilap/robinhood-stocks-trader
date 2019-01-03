@@ -20,7 +20,7 @@ const User = new mongoose.Schema({
     password: String,
     toEmail: String,
   }
-});
+}, { versionKey: false });
 
 User.pre('save', async function (next) {
   const user = this;
