@@ -197,7 +197,7 @@ class Engine {
         if ((isSell || !lastFilledOrder) && buyQuery.test(quote)) {
           const patternName = get(rule, 'strategy.in.name');
           // Cancel any pending order
-          const isCancelled = await this.cancelOrder(user, lastOrder);
+          const isCancelled = await this.cancelOrder(user, lastOrder, symbol);
           assert(isCancelled, `Failed to cancel order ${get(lastOrder, 'id')}. It maybe got filled while sending the request`);
 
           // Initially set risk value one half of its original value in the rule
@@ -220,7 +220,7 @@ class Engine {
         else if (isBuy && (riskPriceReached || sellQuery.test(quote))) {
           const patternName = sellQuery.test(quote) ? get(rule, 'strategy.out.name') : 'Risk reached';
           // Cancel any pending order
-          const isCancelled = await this.cancelOrder(lastOrder);
+          const isCancelled = await this.cancelOrder(user, lastOrder, symbol);
           assert(isCancelled, `Failed to cancel order ${get(lastOrder, 'id', '')}`);
 
           // Sell 0.02% lower than market price to get an easier fill
@@ -270,14 +270,14 @@ class Engine {
    * @param order
    * @returns {Promise.<*>}
    */
-  cancelOrder(user, order = {}) {
+  cancelOrder(user, order = {}, symbol) {
     const orderCancelled = Promise.resolve(true);
     const orderNotCancelled = Promise.resolve(false);
 
     if (get(order, 'cancel')) {
       return rh.postWithAuth(user, order.cancel)
         .then(() => {
-          logger.orderCanceled(order);
+          logger.orderCanceled({ ...order, symbol });
           return orderCancelled;
         })
         .catch(error => {
@@ -317,7 +317,7 @@ class Engine {
 
     return rh.placeOrder(user, options)
       .then(order => {
-        logger.orderPlaced({ patternName, ...order });
+        logger.orderPlaced({ symbol, price, patternName, ...order });
         return order;
       })
       .catch(error => {
