@@ -186,7 +186,7 @@ class Engine {
         }
 
         /**
-         * End of day is approaching, sell all shares in the last 30sec if rule is not holding overnight
+         * End of day is approaching (4PM EST), sell all shares in the last 30sec if rule is not holding overnight
          */
         if (secondsLeftToMarketClosed < 30 && !holdOvernight) {
           if (isBuy) {
