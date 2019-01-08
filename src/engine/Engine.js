@@ -111,7 +111,7 @@ class Engine {
 
   async processFeeds() {
     try {
-      const { isMarketClosed } = marketTimes();
+      const { isMarketClosed, secondsLeftToMarketClosed } = marketTimes();
 
       if (!OVERRIDE_MARKET_CLOSE && isMarketClosed) {
         return;
@@ -129,7 +129,7 @@ class Engine {
         assert(orders, `Orders not found for rule ${rule._id}`);
         rule.orders = orders;
 
-        const { lastOrderId, risk, numberOfShares, symbol } = rule;
+        const { lastOrderId, numberOfShares, symbol, holdOvernight } = rule;
         const lastOrder = lastOrderId
           ? (orders.find(({ id }) => id === lastOrderId) || await rh.getOrder(lastOrderId, user))
           : null;
@@ -151,18 +151,12 @@ class Engine {
         const isBuy = get(lastFilledOrder, 'side') === 'buy';
         const riskValue = get(rule, 'risk.value');
         const riskPriceReached = riskValue > currentPrice;
+        const commonOptions = { user, lastOrder, symbol, currentPrice, numberOfShares, rule };
 
         /**
          * Trade management.
          * Last order got filled, update trade
          */
-
-        // NOTE FOR ME: on the only rule that is enabled I made the mistake to manually sell the
-        // stock it bought. Therefore, it thinks that the rule has an active order. Fix for tomorrow:
-        // Manually buy a share and leave this rule work for a while. Then continue debugging.
-
-        // After this rule looks ok, try the other two rules individually before putting them all to work
-
         if (lastFilledOrder && lastFilledOrder === lastOrder) {
           // Last order is a buy and no trade has been initiated, create one
           if (isBuy && !trade) {
@@ -192,47 +186,40 @@ class Engine {
         }
 
         /**
+         * End of day is approaching, sell all shares in the last 30sec if rule is not holding overnight
+         */
+        if (secondsLeftToMarketClosed < 30 && !holdOvernight) {
+          if (isBuy) {
+            promises.push(this.placeOrder({
+              ...commonOptions,
+              side: 'sell',
+              patternName: 'Sell before market is closed',
+            }));
+          }
+          // Exit at this point
+          return;
+        }
+
+        /**
          * BUY pattern
          */
         if ((isSell || !lastFilledOrder) && buyQuery.test(quote)) {
-          const patternName = get(rule, 'strategy.in.name');
-          // Cancel any pending order
-          const isCancelled = await this.cancelOrder(user, lastOrder, symbol);
-          assert(isCancelled, `Failed to cancel order ${get(lastOrder, 'id')}`);
-
-          // Initially set risk value one half of its original value in the rule
-          const riskValue = currentPrice - (currentPrice * ((risk.percentage * 0.5) / 100));
-          const promise = this.placeOrder(user, numberOfShares, currentPrice, symbol, 'buy', rule, patternName)
-            .then(order => {
-              if (get(order, 'id')) {
-                rule.set('lastOrderId', order.id);
-                rule.set('risk.value', riskValue);
-                return rule.save();
-              }
-            });
-
-          promises.push(promise);
+          promises.push(this.placeOrder({
+            ...commonOptions,
+            side: 'buy',
+            patternName: get(rule, 'strategy.in.name'),
+          }));
         }
 
         /**
          * SELL pattern
          */
         else if (isBuy && (riskPriceReached || sellQuery.test(quote))) {
-          const patternName = sellQuery.test(quote) ? get(rule, 'strategy.out.name') : 'Risk reached';
-          // Cancel any pending order
-          const isCancelled = await this.cancelOrder(user, lastOrder, symbol);
-          assert(isCancelled, `Failed to cancel order ${get(lastOrder, 'id', '')}`);
-
-          // Sell 0.02% lower than market price to get an easier fill
-          // Note: Test this. this may not be needed for high volume/liquid stocks like FB etc...
-          const price = (currentPrice * 0.9998).toFixed(2).toString();
-          const promise = this.placeOrder(user, numberOfShares, price, symbol, 'sell', rule, patternName)
-            .then(order => {
-              rule.set('lastOrderId', order.id);
-              return rule.save();
-            });
-
-          promises.push(promise);
+          promises.push(this.placeOrder({
+            ...commonOptions,
+            side: 'sell',
+            patternName: sellQuery.test(quote) ? get(rule, 'strategy.out.name') : 'Risk reached',
+          }));
         }
 
         /**
@@ -264,73 +251,6 @@ class Engine {
   }
 
   /**
-   * Helper function to cancel last order ONLY if it exists
-   * @note Move into a helper service
-   * @param user
-   * @param order
-   * @returns {Promise.<*>}
-   */
-  cancelOrder(user, order = {}, symbol) {
-    const orderCancelled = Promise.resolve(true);
-    const orderNotCancelled = Promise.resolve(false);
-
-    if (get(order, 'state') === 'filled') {
-      return orderCancelled;
-    }
-
-    if (get(order, 'cancel')) {
-      return rh.postWithAuth(user, order.cancel)
-        .then(() => {
-          logger.orderCanceled({ ...order, symbol });
-          return orderCancelled;
-        })
-        .catch(error => {
-          logger.error(error);
-          return orderNotCancelled;
-        });
-    }
-    return orderCancelled;
-  }
-
-  /**
-   * Helper function to place an order
-   * @note Move into a helper service
-   * @param user
-   * @param quantity
-   * @param price
-   * @param symbol
-   * @param side
-   * @param rule
-   * @param patternName
-   * @returns {*}
-   */
-  placeOrder(user, quantity, price, symbol, side, rule, patternName) {
-    const options = {
-      account: get(user, 'account.url', null),
-      quantity,
-      price: round(price, 2),
-      symbol,
-      side,
-      instrument: rule.instrumentUrl,
-      time_in_force: 'gtc',
-      type: 'limit',
-      trigger: 'immediate',
-      override_day_trade_checks: rule.overrideDayTradeChecks,
-      ref_id: rule.UUID()
-    };
-
-    return rh.placeOrder(user, options)
-      .then(order => {
-        logger.orderPlaced({ symbol, price, patternName, ...order });
-        return order;
-      })
-      .catch(error => {
-        logger.error(error);
-        throw new Error(error);
-      });
-  }
-
-  /**
    * Helper function to fetch orders associated with a rule
    * @note Move into a helper service
    * @param user
@@ -345,8 +265,64 @@ class Engine {
   }
 
   /**
+   * Cancels pending orders and places sell order
+   * @param side
+   * @param user
+   * @param patternName
+   * @param lastOrder
+   * @param symbol
+   * @param price
+   * @param numberOfShares
+   * @param rule
+   * @returns {Promise}
+   */
+  async placeOrder({ side, user, lastOrder, symbol, price, numberOfShares, rule, patternName }) {
+    // Cancel any pending order
+    if (get(lastOrder, 'state') !== 'filled' && get(lastOrder, 'cancel')) {
+      try {
+        await rh.postWithAuth(user, lastOrder.cancel)
+          .then(() => logger.orderCanceled({ ...lastOrder, symbol }));
+      } catch (error) {
+        logger.error(error);
+        return;
+      }
+    }
+
+    const options = {
+      account: get(user, 'account.url', null),
+      quantity: numberOfShares,
+      price: round(price, 2),
+      symbol,
+      side,
+      instrument: rule.instrumentUrl,
+      time_in_force: 'gtc',
+      type: 'limit',
+      trigger: 'immediate',
+      override_day_trade_checks: rule.overrideDayTradeChecks,
+      ref_id: rule.UUID()
+    };
+
+    return rh.placeOrder(user, options)
+      .then(order => {
+        if (get(order, 'id')) {
+          logger.orderPlaced({ symbol, price, patternName, ...order });
+
+          rule.set('lastOrderId', order.id);
+          if (side === 'buy') {
+            // Initially set risk value one half of its original value in the rule
+            const riskValue = price - (price * ((get(rule, 'risk.percentage') * 0.5) / 100));
+            rule.set('risk.value', riskValue);
+          }
+
+          return rule.save();
+        }
+      })
+      .catch(error => logger.error(error));
+  }
+
+  /**
    * Awaits until a change in the quote's price is detected
-   * @returns {Promise<void>}
+   * @returns {Promise}
    */
   async detectIntervalChange() {
     let prices = null;

@@ -67,6 +67,10 @@ const Rule = new mongoose.Schema({
      */
     value: Number,
   },
+  /**
+   * Whether to hold the stock overnight or sell all shares before market closes
+   */
+  holdOvernight: { type: Boolean, default: false },
   strategy: {
     /**
      * Pattern to enter a trade

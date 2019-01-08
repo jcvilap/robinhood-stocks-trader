@@ -165,7 +165,7 @@ class RHService {
    * @param customOption
    * @returns {Promise}
    */
-  postWithAuth({ token }, uri, body, customOption = {}) {
+  postWithAuth({ token }, uri, body = {}, customOption = {}) {
     const options = {
       ...common,
       headers: {

@@ -10,17 +10,20 @@ const { APP_SECRET } = require('../config/env');
  */
 const marketTimes = () => {
   // Calculate hours in UTC
+  const now = moment();
   const marketOpensAt = moment().utc().set({ hour: 14, minute: 30, second: 0 }); // 9:30 AM
   const marketClosesAt = moment().utc().set({ hour: 21, minute: 0, second: 0 }); // 4:00 PM
   const isWeekday = ![6, 7].includes(moment().isoWeekday());
   const isMarketOpen = moment().isBetween(marketOpensAt, marketClosesAt) && isWeekday;
   const isMarketClosed = !isMarketOpen;
+  const secondsLeftToMarketClosed = moment.duration(marketClosesAt.diff(now)).asSeconds();
 
   return {
     marketOpensAt,
     marketClosesAt,
     isMarketOpen,
     isMarketClosed,
+    secondsLeftToMarketClosed,
   };
 };
 
