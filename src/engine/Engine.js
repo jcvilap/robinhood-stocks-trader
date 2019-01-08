@@ -198,7 +198,7 @@ class Engine {
           const patternName = get(rule, 'strategy.in.name');
           // Cancel any pending order
           const isCancelled = await this.cancelOrder(user, lastOrder, symbol);
-          assert(isCancelled, `Failed to cancel order ${get(lastOrder, 'id')}. It maybe got filled while sending the request`);
+          assert(isCancelled, `Failed to cancel order ${get(lastOrder, 'id')}`);
 
           // Initially set risk value one half of its original value in the rule
           const riskValue = currentPrice - (currentPrice * ((risk.percentage * 0.5) / 100));
@@ -273,6 +273,10 @@ class Engine {
   cancelOrder(user, order = {}, symbol) {
     const orderCancelled = Promise.resolve(true);
     const orderNotCancelled = Promise.resolve(false);
+
+    if (get(order, 'state') === 'filled') {
+      return orderCancelled;
+    }
 
     if (get(order, 'cancel')) {
       return rh.postWithAuth(user, order.cancel)

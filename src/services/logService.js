@@ -1,6 +1,6 @@
 const { IncomingWebhook } = require('@slack/client');
 const moment = require('moment');
-const { isString } = require('lodash');
+const { isString, get } = require('lodash');
 const { formatJSON } = require('./utils');
 
 const { SLACK_LOG_ERROR_WEBHOOK_URL, SLACK_LOG_OTHER_WEBHOOK_URL } = require('../config/env');
@@ -12,8 +12,10 @@ class LogService {
   }
 
   error(toBeLogged, error = '') {
-    const message = isString(toBeLogged) ? toBeLogged : formatJSON(toBeLogged, 0);
-    const errorMsg = isString(error) ? error : formatJSON(error, 0);
+    const msg = get(toBeLogged, 'message', toBeLogged);
+    const err = get(error, 'message', error);
+    const message = isString(msg) ? msg : formatJSON(msg, 0);
+    const errorMsg = isString(err) ? err : formatJSON(err, 0);
     const finalMessage = error ? `*${message}* ${errorMsg}`.trim() : message;
     this.errorLogger.send(finalMessage);
     console.log(finalMessage);
