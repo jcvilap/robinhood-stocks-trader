@@ -288,10 +288,19 @@ class Engine {
       }
     }
 
+    let finalPrice;
+    if (side === 'buy') {
+      // Buy 0.01% higher than market price to get an easier fill
+      finalPrice = (Number(price) * 1.0001).toFixed(2).toString();
+    } else {
+      // Sell 0.01% lower than market price to get an easier fill
+      finalPrice = (Number(price) * 0.9999).toFixed(2).toString();
+    }
+
     const options = {
       account: get(user, 'account.url', null),
       quantity: numberOfShares,
-      price: round(price, 2),
+      price: finalPrice,
       symbol,
       side,
       instrument: rule.instrumentUrl,
