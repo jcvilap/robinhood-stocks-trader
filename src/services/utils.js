@@ -1,6 +1,7 @@
 const moment = require('moment');
 const { isNumber } = require('lodash');
 const crypto = require('crypto-js');
+const logger = require('./logService');
 
 const { APP_SECRET } = require('../config/env');
 
@@ -99,7 +100,7 @@ const formatJSON = (json = {}, spaces = 2) => {
 const assert = (object, message, shouldLog = false) => {
   if (!object) {
     if (shouldLog) {
-      log(message);
+      logger.error(message);
     }
 
     throw new Error(message);
