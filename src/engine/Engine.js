@@ -278,7 +278,12 @@ class Engine {
    */
   async placeOrder({ side, user, lastOrder, symbol, price, numberOfShares, rule, patternName }) {
     // Cancel any pending order
-    if (get(lastOrder, 'state') !== 'filled' && get(lastOrder, 'cancel')) {
+    const lockedStates = ['confirmed', 'filled'];
+    if (lockedStates.includes(get(lastOrder, 'state')) && get(lastOrder, 'side') === side) {
+      return;
+    }
+
+    if (!lockedStates.includes(get(lastOrder, 'state')) && get(lastOrder, 'cancel')) {
       try {
         await rh.postWithAuth(user, lastOrder.cancel)
           .then(() => logger.orderCanceled({ ...lastOrder, symbol }));
