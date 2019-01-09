@@ -145,13 +145,13 @@ class Engine {
         assert(buyQuery.__criteria || sellQuery.__criteria, `No strategy found for rule ${rule._id}`);
 
         let trade = trades.find(({ rule }) => rule._id.equals(rule));
-        const currentPrice = quote.close;
+        const price = quote.close;
         const isUptick = quote.close > quote.open;
         const isSell = get(lastFilledOrder, 'side') === 'sell';
         const isBuy = get(lastFilledOrder, 'side') === 'buy';
         const riskValue = get(rule, 'risk.value');
-        const riskPriceReached = riskValue > currentPrice;
-        const commonOptions = { user, lastOrder, symbol, currentPrice, numberOfShares, rule };
+        const riskPriceReached = riskValue > price;
+        const commonOptions = { user, lastOrder, symbol, price, numberOfShares, rule };
 
         /**
          * Trade management.
@@ -229,11 +229,11 @@ class Engine {
           const buyPrice = get(trade, 'buyPrice');
           const riskPercentage = rule.risk.percentage;
           const currentRiskValue = rule.risk.value;
-          const realizedGainPerc = ((currentPrice - buyPrice) / buyPrice) * 100;
+          const realizedGainPerc = ((price - buyPrice) / buyPrice) * 100;
 
           // Gains are higher than half the risk taken
           if (realizedGainPerc > riskPercentage / 2) {
-            const newRiskValue = getRiskFromPercentage(currentPrice, riskPercentage);
+            const newRiskValue = getRiskFromPercentage(price, riskPercentage);
             // Increase risk value only if the new risk is higher
             if (newRiskValue > currentRiskValue) {
               rule.set('risk.value', newRiskValue);
