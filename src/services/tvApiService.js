@@ -1,14 +1,12 @@
 const request = require('request-promise-native');
+const { get } = require('lodash');
+
 const { TV_API_BASE } = require('../config/env');
+const historyKeys = ['rsi', 'volume', ];
 
 class TVService {
-  /**
-   * Retrieves symbol
-   * @returns {Promise}
-   */
-  getQuote(symbol) {
-    return this.getQuotes(symbol)
-      .then(data => data[0]);
+  constructor() {
+    this.previousQuotes = {};
   }
 
   /**
@@ -30,17 +28,31 @@ class TVService {
     };
 
     return request(options)
-      .then(({ data }) => data.map(s => ({
-        symbol: s.s,
-        rsi: Number(s.d[0]),
-        close: Number(s.d[1]),
-        open: Number(s.d[2]),
-        diff: Number(s.d[1]) - Number(s.d[2]),
-        macd: Number(s.d[3]),         // <-- blue line
-        macdSignal: Number(s.d[4]),   // <-- yellow line
-        ema: Number(s.d[5]),
-        volume: Number(s.d[6]),
-      })));
+      .then(({ data }) => data.map(s => {
+        const quote = {
+          symbol: s.s,
+          rsi: Number(s.d[0]),
+          close: Number(s.d[1]),
+          open: Number(s.d[2]),
+          diff: Number(s.d[1]) - Number(s.d[2]),
+          macd: Number(s.d[3]),         // <-- blue line
+          macdSignal: Number(s.d[4]),   // <-- yellow line
+          ema: Number(s.d[5]),
+          volume: Number(s.d[6]),
+        };
+
+        // Get previous quote values
+        const previousQuote = get(this.previousQuotes, quote.symbol, {});
+
+        // Save current quote back to memory
+        this.previousQuotes[quote.symbol] = { ...quote };
+
+        // Append previous quote values to current quote with a "previous" prefix
+        historyKeys.forEach(key => quote[`previous_${key}`] = previousQuote[key]);
+
+        // Return quote with current and previous values
+        return quote;
+      }));
   }
 }
 

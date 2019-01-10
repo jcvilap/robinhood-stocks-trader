@@ -14,9 +14,10 @@ class LogService {
   error(toBeLogged, error = '') {
     const msg = get(toBeLogged, 'message', toBeLogged);
     const err = get(error, 'message', error);
+    const stack = get(toBeLogged, 'stack', get(error, 'stack', ''));
     const message = isString(msg) ? msg : formatJSON(msg, 0);
     const errorMsg = isString(err) ? err : formatJSON(err, 0);
-    const finalMessage = error ? `*${message}* ${errorMsg}`.trim() : message;
+    const finalMessage = `*${message}* ${errorMsg} ${stack}`.trim();
     this.errorLogger.send(finalMessage);
     console.log(finalMessage);
   }
