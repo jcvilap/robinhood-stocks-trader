@@ -22,14 +22,14 @@ class LogService {
     console.log(finalMessage);
   }
 
-  orderPlaced({ symbol, side, patternName, created_at = new Date(), price }) {
-    const message = `${symbol} | ${side} | ${patternName} | $${Number(price).toFixed(3)} | ${moment(created_at).format('MM/DD/YY h:mm:ssa')}`;
+  orderPlaced({ symbol, side, name, created_at = new Date(), price }) {
+    const message = `${symbol} | ${side} | ${name} | $${Number(price).toFixed(3)} | ${moment(created_at).format('MM/DD/YY h:mm:ssa')}`;
     this.logger.send(`:rocket: *ORDER PLACED =>* ${message}`);
     console.log(`*ORDER PLACED =>* ${message}`);
   }
 
-  orderCanceled({ symbol, side, patternName, date = new Date(), price }) {
-    const message = `${symbol} | ${side} | $${Number(price).toFixed(3)} | ${moment(date).format('MM/DD/YY h:mm:ssa')}`;
+  orderCanceled({ symbol, side, name, date = new Date(), price }) {
+    const message = `${symbol} | ${side} | ${name} | $${Number(price).toFixed(3)} | ${moment(date).format('MM/DD/YY h:mm:ssa')}`;
     this.logger.send(`:skull: *ORDER CANCELLED =>* ${message}`);
     console.log(`*ORDER CANCELLED =>* ${message}`);
   }

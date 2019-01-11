@@ -3,6 +3,10 @@ const uuid = require('uuid/v1');
 
 const Rule = new mongoose.Schema({
   /**
+   * Rule name
+   */
+  name: { type: String, required: true },
+  /**
    * Stock symbol
    * @example 'SNAP'
    */
@@ -112,5 +116,11 @@ Rule.methods.UUID = function() {
 };
 // endregion
 
+// region INDEXES
+Rule.index(
+  { symbol: 1, 'strategy.in': 1 },
+  { name: 'unique_symbol_strategy_in', unique: true },
+);
+// endregion
 
 module.exports = mongoose.model('Rule', Rule);

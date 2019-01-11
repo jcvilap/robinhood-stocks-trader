@@ -146,7 +146,7 @@ class Engine {
 
         let trade = trades.find(({ rule }) => rule._id.equals(rule));
         const price = quote.close;
-        const isUptick = quote.close > quote.open;
+        const isUptick = quote.close > quote.previous_close;
         const isSell = get(lastFilledOrder, 'side') === 'sell';
         const isBuy = get(lastFilledOrder, 'side') === 'buy';
         const riskValue = get(rule, 'risk.value');
@@ -280,7 +280,7 @@ class Engine {
     if (get(lastOrder, 'state') !== 'filled' && get(lastOrder, 'cancel')) {
       try {
         await rh.postWithAuth(user, lastOrder.cancel)
-          .then(() => logger.orderCanceled({ ...lastOrder, symbol }));
+          .then(() => logger.orderCanceled({ ...lastOrder, symbol, name: rule.name }));
       } catch (error) {
         return;
       }
@@ -312,7 +312,7 @@ class Engine {
     return rh.placeOrder(user, options)
       .then(order => {
         if (get(order, 'id')) {
-          logger.orderPlaced({ symbol, price, patternName, ...order });
+          logger.orderPlaced({ symbol, price, patternName, ...order, name: rule.name });
 
           rule.set('lastOrderId', order.id);
           if (side === 'buy') {
