@@ -98,6 +98,10 @@ class Engine {
       return null;
     }).filter(a => a);
 
+    // Append user positions
+    const positionPromises = this.users.map(user => rh.getPositions(user)
+      .then(positions => user.positions = positions));
+
     // Append rule orders by refId
     const orderPromises = this.rules.map(rule => {
       const user = this.users.find(({ _id }) => rule.user._id.equals(_id));
@@ -105,7 +109,7 @@ class Engine {
         .then(orders => rule.orders = orders);
     });
 
-    await Promise.all(accountPromises.concat(orderPromises))
+    await Promise.all(accountPromises.concat(orderPromises).concat(positionPromises))
       .catch(error => logger.error(error));
   }
 
@@ -152,6 +156,7 @@ class Engine {
         const riskValue = get(rule, 'risk.value');
         const riskPriceReached = riskValue > price;
         const commonOptions = { user, lastOrder, symbol, price, numberOfShares, rule };
+        const userHasPositions = user.positions.length > 0;
 
         /**
          * Trade management.
@@ -193,7 +198,7 @@ class Engine {
             promises.push(this.placeOrder({
               ...commonOptions,
               side: 'sell',
-              patternName: 'Sell before market is closed',
+              name: `${get(rule, 'name')}(Sell before market is closed)`,
             }));
           }
           // Exit at this point
@@ -203,22 +208,22 @@ class Engine {
         /**
          * BUY pattern
          */
-        if ((isSell || !lastFilledOrder) && buyQuery.test(quote)) {
+        if ((isSell || !lastFilledOrder || !userHasPositions) && buyQuery.test(quote)) {
           promises.push(this.placeOrder({
             ...commonOptions,
             side: 'buy',
-            patternName: get(rule, 'strategy.in.name'),
+            name: get(rule, 'name'),
           }));
         }
 
         /**
          * SELL pattern
          */
-        else if (isBuy && (riskPriceReached || sellQuery.test(quote))) {
+        else if (userHasPositions && isBuy && (riskPriceReached || sellQuery.test(quote))) {
           promises.push(this.placeOrder({
             ...commonOptions,
             side: 'sell',
-            patternName: sellQuery.test(quote) ? get(rule, 'strategy.out.name') : 'Risk reached',
+            name: sellQuery.test(quote) ? get(rule, 'name') : `${get(rule, 'name')}(Risk reached)`,
           }));
         }
 
@@ -268,7 +273,7 @@ class Engine {
    * Cancels pending orders and places sell order
    * @param side
    * @param user
-   * @param patternName
+   * @param name
    * @param lastOrder
    * @param symbol
    * @param price
@@ -276,11 +281,11 @@ class Engine {
    * @param rule
    * @returns {Promise}
    */
-  async placeOrder({ side, user, lastOrder, symbol, price, numberOfShares, rule, patternName }) {
+  async placeOrder({ side, user, lastOrder, symbol, price, numberOfShares, rule, name }) {
     if (get(lastOrder, 'state') !== 'filled' && get(lastOrder, 'cancel')) {
       try {
         await rh.postWithAuth(user, lastOrder.cancel)
-          .then(() => logger.orderCanceled({ ...lastOrder, symbol, name: rule.name }));
+          .then(() => logger.orderCanceled({ ...lastOrder, symbol, name }));
       } catch (error) {
         return;
       }
@@ -312,7 +317,7 @@ class Engine {
     return rh.placeOrder(user, options)
       .then(order => {
         if (get(order, 'id')) {
-          logger.orderPlaced({ symbol, price, patternName, ...order, name: rule.name });
+          logger.orderPlaced({ symbol, price, ...order, name });
 
           rule.set('lastOrderId', order.id);
           if (side === 'buy') {

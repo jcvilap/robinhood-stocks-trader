@@ -124,11 +124,15 @@ class RHService {
 
   /**
    * Retrieves all positions for all accounts
+   * @param token
    * @returns {Promise}
    */
-  getPositions() {
+  getPositions({ token }) {
     const options = {
-      ...this.commonPrivate,
+      ...common,
+      headers: {
+        Authorization: token,
+      },
       uri: `${RBH_API_BASE}/positions/?nonzero=true`,
     };
     return request(options)
