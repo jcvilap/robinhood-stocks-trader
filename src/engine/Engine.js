@@ -156,7 +156,7 @@ class Engine {
         const riskValue = get(rule, 'risk.value');
         const riskPriceReached = riskValue > price;
         const commonOptions = { user, lastOrder, symbol, price, numberOfShares, rule };
-        const userHasPositions = user.positions.length > 0;
+        const userHasPositions = get(user, 'positions.length', 0) > 0;
 
         /**
          * Trade management.
