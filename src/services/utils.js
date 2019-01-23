@@ -54,10 +54,10 @@ const decrypt = (encrypted) => {
 /**
  * Replaces quote values in pattern string and then parses the string into an object
  * @param pattern
- * @param quote
+ * @param object
  * @returns {Object}
  */
-const parsePattern = (pattern = null, quote) => {
+const parsePattern = (pattern = null, object) => {
   if (!pattern) {
     // Non matching query
     return { __invalidField__: { $exists: true } };
@@ -66,10 +66,10 @@ const parsePattern = (pattern = null, quote) => {
   const regex = /{{.+?}}/g;
   if (pattern && pattern.match(regex)) {
     let result = pattern;
-    Object.keys(quote).forEach(key => {
+    Object.keys(object).forEach(key => {
       if (result.includes(`{{${key}}}`)) {
-          const toBeReplaced = isNumber(quote[key]) ? `"{{${key}}}"` : `{{${key}}}`;
-          result = result.replace(toBeReplaced, quote[key]);
+          const toBeReplaced = isNumber(object[key]) ? `"{{${key}}}"` : `{{${key}}}`;
+          result = result.replace(toBeReplaced, object[key]);
       }
     });
     return JSON.parse(result);

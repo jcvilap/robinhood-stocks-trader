@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const uuid = require('uuid/v1');
+const crypto = require('crypto');
 
 const Rule = new mongoose.Schema({
   /**
@@ -30,25 +31,13 @@ const Rule = new mongoose.Schema({
    */
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   /**
-   * Last filled order id
-   */
-  lastOrderId: { type: String },
-  /**
    * Reference uuid to give the broker. User to filter orders
    */
-  refId: { type: String },
+  refId: { type: String, index: { unique: true } },
   /**
    * Number of shares to trade
    */
   numberOfShares: { type: Number, required: true },
-  /**
-   * Number of winning trades
-   */
-  negativeTrades: { type: Number, default: 0 },
-  /**
-   * Number of losing trades
-   */
-  positiveTrades: { type: Number, default: 0 },
   /**
    * Rule enabled flag
    */
@@ -66,10 +55,6 @@ const Rule = new mongoose.Schema({
      * Percentage of the initial value to risk off
      */
     percentage: { type: Number, default: 1 },
-    /**
-     * Current limit calculate value(stock price)
-     */
-    value: Number,
   },
   /**
    * Whether to hold the stock overnight or sell all shares before market closes
@@ -89,9 +74,8 @@ const Rule = new mongoose.Schema({
 
 // region HOOKS
 Rule.post('save', async function(doc) {
-  if (doc._id && !(doc.refId && doc._id.toString().startsWith(doc.refId))) {
-    const refId = doc._id.toString().substr(0, 12);
-    doc.set('refId', refId);
+  if (!doc.refId) {
+    doc.set('refId', crypto.randomBytes(6).toString('hex'));
 
     await doc.save();
   }

@@ -1,23 +1,24 @@
-const { get, uniqBy, uniq, round, isString } = require('lodash');
+const { get, uniqBy, uniq, isString } = require('lodash');
 const { Query } = require('mingo');
 
 const { Trade, queries: { getActiveRules, getIncompleteTrades } } = require('../models');
 const rh = require('../services/rhApiService');
 const tv = require('../services/tvApiService');
 const logger = require('../services/logService');
+
 const {
   marketTimes,
   assert,
   parsePattern,
   getRiskFromPercentage,
-  TEN_SECONDS,
   FIVE_SECONDS,
   FIVE_HOURS,
-  TEN_MINUTES
+  TEN_MINUTES,
 } = require('../services/utils');
 
 // Todo: move constants to `process.env.js`
 const OVERRIDE_MARKET_CLOSE = false;
+const MANUALLY_SELL_ALL = false;
 
 class Engine {
   constructor() {
@@ -32,8 +33,10 @@ class Engine {
       await this.loadRulesAndAccounts();
       await this.detectIntervalChange();
 
-      setInterval(() => this.loadRulesAndAccounts(), TEN_SECONDS);
-      setInterval(() => this.processFeeds(), FIVE_SECONDS);
+      setInterval(async () => {
+        await this.processFeeds();
+        await this.loadRulesAndAccounts();
+      }, FIVE_SECONDS);
     } catch (error) {
       logger.error(error);
     }
@@ -57,6 +60,14 @@ class Engine {
 
     // Fetch fresh rules
     this.rules = await getActiveRules();
+
+    // Populate refId if not ready
+    this.rules.forEach(async rule => {
+      if (!rule.refId) {
+        await rule.save();
+      }
+    });
+
     // Fetch fresh users
     this.users = uniqBy(this.rules.map(rule => ({ ...rule.user.toObject(), _id: rule.user._id.toString() })), '_id');
 
@@ -109,7 +120,7 @@ class Engine {
         .then(orders => rule.orders = orders);
     });
 
-    await Promise.all(accountPromises.concat(orderPromises).concat(positionPromises))
+    return Promise.all(accountPromises.concat(orderPromises).concat(positionPromises))
       .catch(error => logger.error(error));
   }
 
@@ -129,76 +140,113 @@ class Engine {
         const user = this.users.find(u => rule.user._id.equals(u._id));
         assert(user, `User ${rule.user._id} not found in rule ${rule._id}`);
 
-        const orders = rule.orders || await this.getRuleOrders(user, rule);
-        assert(orders, `Orders not found for rule ${rule._id}`);
-        rule.orders = orders;
+        let trade = trades.find(({ rule }) => rule._id.equals(rule));
+        let lastOrderIsSell = !trade;
+        let lastOrderIsBuy = null;
 
-        const { lastOrderId, numberOfShares, symbol, holdOvernight } = rule;
-        const lastOrder = lastOrderId
-          ? (orders.find(({ id }) => id === lastOrderId) || await rh.getOrder(lastOrderId, user))
-          : null;
-        const lastFilledOrder = get(lastOrder, 'state') === 'filled'
-          ? lastOrder
-          : orders.find(({ state }) => state === 'filled');
+        /**
+         * Trade management
+         */
+        if (trade) {
+          const lastOrderId = get(trade, 'sellOrderId') || get(trade, 'buyOrderId');
+          assert(lastOrderId, `Trade without sellOrderId or buyOrderId found. Id: ${trade._id}`);
 
+          let lastOrder = get(rule, 'orders', []).find(({ id }) => id === lastOrderId);
+          if (!lastOrder) {
+            // Get fresh rule orders
+            rule.orders = await this.getRuleOrders(user, rule);
+            lastOrder = rule.orders.find(({ id }) => id === lastOrderId);
+          }
+          assert(lastOrder, `Fatal error! Order not found for order id: ${lastOrderId} and trade id: ${trade._id}`);
+
+          const lastOrderIsFilled = get(lastOrder, 'state') === 'filled';
+          lastOrderIsSell = get(lastOrder, 'side') === 'sell';
+          lastOrderIsBuy = get(lastOrder, 'side') === 'buy';
+
+          if (lastOrderIsFilled) {
+            const price = Number(get(lastOrder, 'average_price'));
+            const date = new Date(get(lastOrder, 'updated_at'));
+
+            if (lastOrderIsBuy) {
+              // Initially set risk value one half of its original percentage value in the rule
+              const riskValue = price - (price * ((get(rule, 'risk.percentage') * 0.5) / 100));
+
+              trade.set('buyPrice', price);
+              trade.set('buyDate', date);
+              trade.set('riskValue', riskValue);
+            }
+            else if (lastOrderIsSell) {
+              trade.set('sellPrice', price);
+              trade.set('sellDate', date);
+              trade.set('completed', true);
+
+              // Save and close trade
+              await trade.save();
+
+              // Reset trade vars
+              trade = null;
+              lastOrder = null;
+            }
+          }
+          // Cancel pending(non-filled) order
+          else {
+            let failedCancelingOrder = false;
+            try {
+              await this.cancelLastOrder(user, lastOrder, rule.symbol, rule.name);
+              if (lastOrderIsBuy) {
+                // Clean up trade after cancelled order
+                await trade.remove();
+                trade = null;
+                lastOrderIsBuy = false;
+                lastOrderIsSell = true;
+              }
+              else if (lastOrderIsSell) {
+                trade.set('sellPrice', undefined);
+                trade.set('sellDate', undefined);
+                trade.set('completed', false);
+                trade.set('sellOrderId', undefined);
+
+                lastOrderIsBuy = true;
+                lastOrderIsSell = false;
+              }
+
+            } catch (error) {
+              logger.error(error);
+              failedCancelingOrder = true;
+            }
+            // Do not throw, only exit
+            if (failedCancelingOrder) {
+              return;
+            }
+          }
+        }
+
+        const { numberOfShares, symbol, holdOvernight, orders } = rule;
         const quote = quotes.find(q => q.symbol === `${rule.exchange}:${rule.symbol}`);
         assert(quote, `Quote for ${rule.symbol} not found`);
 
-        const buyQuery = new Query(parsePattern(get(rule, 'strategy.in.query'), quote));
-        const sellQuery = new Query(parsePattern(get(rule, 'strategy.out.query'), quote));
-        assert(buyQuery.__criteria || sellQuery.__criteria, `No strategy found for rule ${rule._id}`);
-
-        let trade = trades.find(({ rule }) => rule._id.equals(rule));
         const price = quote.close;
         const isUptick = quote.close > quote.previous_close;
-        const isSell = get(lastFilledOrder, 'side') === 'sell';
-        const isBuy = get(lastFilledOrder, 'side') === 'buy';
-        const riskValue = get(rule, 'risk.value');
+        const metadata = { ...rule.toObject(), ...user, ...quote };
+        const buyQuery = new Query(parsePattern(get(rule, 'strategy.in.query'), metadata));
+        const sellQuery = new Query(parsePattern(get(rule, 'strategy.out.query'), metadata));
+        assert(buyQuery.__criteria || sellQuery.__criteria, `No strategy found for rule ${rule._id}`);
+
+        const lastTradeIsCompleted = get(trade, 'completed');
+        const riskValue = lastTradeIsCompleted ? get(trade, 'riskValue') : 0;
         const riskPriceReached = riskValue > price;
-        const commonOptions = { user, lastOrder, symbol, price, numberOfShares, rule };
-        const userHasPositions = get(user, 'positions.length', 0) > 0;
-
-        /**
-         * Trade management.
-         * Last order got filled, update trade
-         */
-        if (lastFilledOrder && lastFilledOrder === lastOrder) {
-          // Last order is a buy and no trade has been initiated, create one
-          if (isBuy && !trade) {
-            trade = new Trade({
-              rule: rule._id.toString(),
-              user: user._id.toString(),
-              buyPrice: Number(lastOrder.price),
-            });
-
-            promises.push(trade.save());
-          }
-          // Trade was finished by last sell order
-          else if (isSell && trade && get(trade, 'completed') === false) {
-            trade.set('completed', true);
-            trade.set('sellPrice', Number(lastOrder.price));
-            trade.set('date', new Date());
-
-            if (trade.sellPrice > trade.buyPrice) {
-              rule.positiveTrades = rule.positiveTrades + 1;
-            } else {
-              rule.negativeTrades = rule.negativeTrades + 1;
-            }
-
-            promises.push(trade.save());
-            promises.push(rule.save());
-          }
-        }
+        const commonOptions = { user, symbol, price, numberOfShares, rule, trade };
 
         /**
          * End of day is approaching (4PM EST), sell all shares in the last 30sec if rule is not holding overnight
          */
-        if (secondsLeftToMarketClosed < 30 && !holdOvernight) {
-          if (isBuy) {
+        if (MANUALLY_SELL_ALL || !OVERRIDE_MARKET_CLOSE &&
+          (secondsLeftToMarketClosed < 30 && !holdOvernight)) {
+          if (lastOrderIsBuy) {
             promises.push(this.placeOrder({
               ...commonOptions,
               side: 'sell',
-              name: `${get(rule, 'name')}(Sell before market is closed)`,
+              name: `${get(rule, 'name')}(${MANUALLY_SELL_ALL ? 'Manual sell' : 'Sell before market is closed'})`,
             }));
           }
           // Exit at this point
@@ -208,7 +256,7 @@ class Engine {
         /**
          * BUY pattern
          */
-        if ((isSell || !lastFilledOrder || !userHasPositions) && buyQuery.test(quote)) {
+        if (lastOrderIsSell && buyQuery.test(metadata)) {
           promises.push(this.placeOrder({
             ...commonOptions,
             side: 'buy',
@@ -219,7 +267,7 @@ class Engine {
         /**
          * SELL pattern
          */
-        else if (userHasPositions && isBuy && (riskPriceReached || sellQuery.test(quote))) {
+        else if (lastOrderIsBuy && (riskPriceReached || sellQuery.test(metadata))) {
           promises.push(this.placeOrder({
             ...commonOptions,
             side: 'sell',
@@ -230,29 +278,36 @@ class Engine {
         /**
          * Follow price logic
          */
-        else if (isBuy && get(trade, 'buyPrice') && rule.risk.followPrice && isUptick) {
+        else if (lastOrderIsBuy && get(trade, 'buyPrice') && rule.risk.followPrice && isUptick) {
           const buyPrice = get(trade, 'buyPrice');
           const riskPercentage = rule.risk.percentage;
-          const currentRiskValue = rule.risk.value;
           const realizedGainPerc = ((price - buyPrice) / buyPrice) * 100;
 
           // Gains are higher than half the risk taken
-          if (realizedGainPerc > riskPercentage / 2) {
+          if (realizedGainPerc > (riskPercentage / 2)) {
             const newRiskValue = getRiskFromPercentage(price, riskPercentage);
             // Increase risk value only if the new risk is higher
-            if (newRiskValue > currentRiskValue) {
-              rule.set('risk.value', newRiskValue);
-
-              promises.push(rule.save());
+            if (newRiskValue > riskValue) {
+              trade.set('riskValue', newRiskValue);
             }
           }
         }
+
+        if (rule.isModified()) {
+          promises.push(rule.save());
+        }
+
+        if (trade && trade.isModified()) {
+          promises.push(trade.save());
+        }
       });
 
-      await Promise.all(promises).catch(error => logger.error(error));
+      return Promise.all(promises).catch(error => logger.error(error));
     } catch (error) {
       logger.error(error);
     }
+
+    return Promise.resolve();
   }
 
   /**
@@ -270,27 +325,34 @@ class Engine {
   }
 
   /**
+   * Cancels pending order
+   * @param user
+   * @param lastOrder
+   * @param name
+   * @param symbol
+   * @returns {Promise}
+   */
+  cancelLastOrder(user, lastOrder, symbol, name) {
+    if (get(lastOrder, 'state') !== 'filled' && get(lastOrder, 'cancel')) {
+      return rh.postWithAuth(user, lastOrder.cancel)
+        .then(() => logger.orderCanceled({ ...lastOrder, symbol, name }));
+    }
+    return Promise.resolve();
+  }
+
+  /**
    * Cancels pending orders and places sell order
    * @param side
    * @param user
    * @param name
-   * @param lastOrder
    * @param symbol
    * @param price
    * @param numberOfShares
    * @param rule
+   * @param trade
    * @returns {Promise}
    */
-  async placeOrder({ side, user, lastOrder, symbol, price, numberOfShares, rule, name }) {
-    if (get(lastOrder, 'state') !== 'filled' && get(lastOrder, 'cancel')) {
-      try {
-        await rh.postWithAuth(user, lastOrder.cancel)
-          .then(() => logger.orderCanceled({ ...lastOrder, symbol, name }));
-      } catch (error) {
-        return;
-      }
-    }
-
+  async placeOrder({ side, user, symbol, price, numberOfShares, rule, name, trade }) {
     let finalPrice;
     if (side === 'buy') {
       // Buy 0.01% higher than market price to get an easier fill
@@ -316,18 +378,19 @@ class Engine {
 
     return rh.placeOrder(user, options)
       .then(order => {
-        if (get(order, 'id')) {
-          logger.orderPlaced({ symbol, price, ...order, name });
+        logger.orderPlaced({ symbol, price, ...order, name });
 
-          rule.set('lastOrderId', order.id);
-          if (side === 'buy') {
-            // Initially set risk value one half of its original value in the rule
-            const riskValue = price - (price * ((get(rule, 'risk.percentage') * 0.5) / 100));
-            rule.set('risk.value', riskValue);
+        // Update order id on trade
+        if (side === 'buy') {
+          if (!trade) {
+            trade = new Trade({ rule: rule._id.toString(), user: user._id.toString() });
           }
-
-          return rule.save();
+          trade.set('buyOrderId', order.id);
+        } else {
+          trade.set('sellOrderId', order.id);
         }
+
+        return trade.save();
       })
       .catch(error => logger.error(error));
   }
