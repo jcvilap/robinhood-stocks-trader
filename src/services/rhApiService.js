@@ -56,7 +56,9 @@ class RHService {
       uri: `${RBH_API_BASE}/orders/${query}`,
     };
     return request(options)
-      .then(({ results }) => results);
+      .then(response => {
+        return response.results;
+      });
   }
 
   /**
