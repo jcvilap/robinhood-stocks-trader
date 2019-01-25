@@ -188,11 +188,11 @@ class Engine {
             }
             // Cancel pending(non-filled) order
             else {
-              const cancelledSuccessfully = await this.cancelLastOrder(user, lastOrder, rule.symbol, rule.name);
-              assert(cancelledSuccessfully, `Failed to cancel order: ${lastOrder.id}`);
+              const canceledSuccessfully = await this.cancelLastOrder(user, lastOrder, rule.symbol, rule.name);
+              assert(canceledSuccessfully, `Failed to cancel order: ${lastOrder.id}`);
 
               if (lastOrderIsBuy) {
-                // Clean up trade after cancelled order
+                // Clean up trade after canceled order
                 await trade.remove();
 
                 trade = null;
@@ -318,12 +318,17 @@ class Engine {
    * @returns {Promise}
    */
   cancelLastOrder(user, lastOrder, symbol, name) {
+    if (get(lastOrder, 'state') === 'canceled') {
+      return Promise.resolve(true);
+    }
+
     if (get(lastOrder, 'state') !== 'filled' && get(lastOrder, 'cancel')) {
       return rh.postWithAuth(user, lastOrder.cancel)
         .then(() => logger.orderCanceled({ ...lastOrder, symbol, name }))
         .then(() => true)
         .catch(() => false);
     }
+
     return Promise.resolve(false);
   }
 
