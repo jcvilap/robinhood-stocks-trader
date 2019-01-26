@@ -1,32 +1,31 @@
 const request = require('request-promise-native');
-const { RBH_API_BASE, RH_CREDENTIALS } = require('../config/env');
+const querystring = require('querystring');
+const { RBH_API_BASE } = require('../config/env');
+const Utils = require('../services/utils');
 
 const common = { json: true };
 const TOKEN_REFRESH_INTERVAL = 18000000;
 
 class RHService {
-  constructor() {
-    this.commonPrivate = { ...common, headers: {} };
-  }
-
   /**
    * Authenticates against RB service and stores Authorization header for future requests
    * @returns {Promise}
    */
-  auth() {
+  async auth(config) {
     const options = {
       ...common,
       method: 'POST',
       uri: `${RBH_API_BASE}/oauth2/token/`,
       form: {
-        ...RH_CREDENTIALS,
+        ...config,
+        password: Utils.decrypt(config.password),
         grant_type: 'password',
         scope: 'internal',
         expires_in: TOKEN_REFRESH_INTERVAL // 5h
       }
     };
     return request(options)
-      .then(({ access_token, token_type }) => this.commonPrivate.headers.Authorization = `${token_type} ${access_token}`);
+      .then(({ access_token, token_type }) => `${token_type} ${access_token}`);
   }
 
   /**
@@ -47,22 +46,44 @@ class RHService {
    * Retrieves all orders for account
    * @returns {Promise}
    */
-  getOrders() {
+  getOrders({ token }, filters) {
+    const query = filters ? `?${querystring.stringify(filters)}` : '';
     const options = {
-      ...this.commonPrivate,
-      uri: `${RBH_API_BASE}/orders/`,
+      ...common,
+      headers: {
+        Authorization: token,
+      },
+      uri: `${RBH_API_BASE}/orders/${query}`,
     };
     return request(options)
-      .then(({ results }) => results);
+      .then(response => {
+        return response.results;
+      });
+  }
+
+  /**
+   * Retrieves order by id
+   * @returns {Promise}
+   */
+  getOrder(id, { token }) {
+    const options = {
+      ...common,
+      headers: {
+        Authorization: token,
+      },
+      uri: `${RBH_API_BASE}/orders/${id}`,
+    };
+    return request(options);
   }
 
   /**
    * Places a generic order
+   * @param user
    * @param order
    * @returns {Promise}
    */
-  placeOrder(order) {
-    return this.postWithAuth(`${RBH_API_BASE}/orders/`, order);
+  placeOrder(user, order) {
+    return this.postWithAuth(user, `${RBH_API_BASE}/orders/`, order);
   }
 
   /**
@@ -70,9 +91,12 @@ class RHService {
    * Note: Even though it seems like RH supports multiple accounts for a user, for now we will not...
    * @returns {Promise}
    */
-  getAccount() {
+  getAccount({ token }) {
     const options = {
-      ...this.commonPrivate,
+      ...common,
+      headers: {
+        Authorization: token,
+      },
       uri: `${RBH_API_BASE}/accounts/`,
     };
     return request(options)
@@ -102,11 +126,15 @@ class RHService {
 
   /**
    * Retrieves all positions for all accounts
+   * @param token
    * @returns {Promise}
    */
-  getPositions() {
+  getPositions({ token }) {
     const options = {
-      ...this.commonPrivate,
+      ...common,
+      headers: {
+        Authorization: token,
+      },
       uri: `${RBH_API_BASE}/positions/?nonzero=true`,
     };
     return request(options)
@@ -138,13 +166,17 @@ class RHService {
   /**
    * Generic POST request with authentication headers
    * @param uri
+   * @param token
    * @param body
    * @param customOption
    * @returns {Promise}
    */
-  postWithAuth(uri, body, customOption = {}) {
+  postWithAuth({ token }, uri, body = {}, customOption = {}) {
     const options = {
-      ...this.commonPrivate,
+      ...common,
+      headers: {
+        Authorization: token,
+      },
       method: 'POST',
       uri,
       body,
