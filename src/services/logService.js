@@ -33,6 +33,11 @@ class LogService {
     this.logger.send(`:skull: *ORDER CANCELED =>* ${message}`);
     console.log(`*ORDER CANCELED =>* ${message}`);
   }
+
+  log(message) {
+    this.logger.send(message);
+    console.log(message);
+  }
 }
 
 module.exports = new LogService();

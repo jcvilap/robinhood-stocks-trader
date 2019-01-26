@@ -35,6 +35,8 @@ class Engine {
 
       setInterval(() => this.processFeeds(), FIVE_SECONDS);
       setInterval(() => this.loadRulesAndAccounts(), FIVE_SECONDS);
+
+      logger.log('Engine started.');
     } catch (error) {
       logger.error(error);
     }
@@ -384,7 +386,7 @@ class Engine {
 
         return trade.save();
       })
-      .catch(error => logger.error(error));
+      .catch(error => logger.error({ message: `Failed to place order for rule ${name}. ${error.message}`}));
   }
 
   /**
