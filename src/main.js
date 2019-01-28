@@ -25,10 +25,10 @@ class App {
 
   start() {
     createApi(this.db);
-    this.server.listen(ENGINE_PORT, () => {
-      console.log('Engine running on port:', ENGINE_PORT);
-      //this.engine.start();
-    });
+    // this.server.listen(ENGINE_PORT, () => {
+    //   console.log('Engine running on port:', ENGINE_PORT);
+    //   this.engine.start();
+    // });
   }
 
   handleExit() {
