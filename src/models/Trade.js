@@ -42,4 +42,15 @@ Trade.index(
   }
 );
 
+Trade.pre('save', async function (next) {
+  const trade = this;
+  const { sellPrice, buyPrice, completed } = trade;
+
+  if (completed) {
+    trade.gainPercent = ((sellPrice - buyPrice)/buyPrice) * 100;
+  }
+
+  return next();
+});
+
 module.exports = mongoose.model('Trade', Trade);
