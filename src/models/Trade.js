@@ -29,6 +29,8 @@ const Trade = new mongoose.Schema({
    * Id of the Rule executing the order
    */
   rule: { type: mongoose.Schema.Types.ObjectId, ref: 'Rule', required: true },
+
+  gainPercent: { type: Number },
 }, { versionKey: false });
 
 Trade.index(
