@@ -117,7 +117,11 @@ class Engine {
     const orderPromises = this.rules.map((rule, index) => {
       const user = this.users.find(({ _id }) => rule.user._id.equals(_id));
       return this.getRuleOrders(user, rule)
-        .then(orders => this.rules[index].orders = orders);
+        .then((orders = []) => {
+          if (orders.length) {
+            this.rules[index].orders = orders;
+          }
+        });
     });
 
     return Promise.all(accountPromises.concat(orderPromises).concat(positionPromises))
@@ -135,6 +139,8 @@ class Engine {
       const symbols = uniq(this.rules.map(r => `${r.exchange}:${r.symbol}`));
       const [quotes, trades] = await Promise.all([tv.getQuotes(...symbols), getIncompleteTrades()]);
       const promises = [];
+
+      console.log('macd: ', quotes[0].macd, '| signal: ', quotes[0].macdSignal, '| rsi: ', quotes[0].rsi, '| volume: ', quotes[0].volume);
 
       this.rules.forEach(async rule => {
         try {
@@ -158,8 +164,10 @@ class Engine {
             let lastOrder = get(rule, 'orders', []).find(({ id }) => id === lastOrderId);
             if (!lastOrder) {
               // Get fresh rule orders
-              rule.orders = await this.getRuleOrders(user, rule);
-              lastOrder = rule.orders.find(({ id }) => id === lastOrderId);
+              [rule.orders, lastOrder] = await Promise.all([
+                this.getRuleOrders(user, rule),
+                rh.getOrder(lastOrderId, user),
+              ]);
             }
             assert(lastOrder, `Fatal error. Order not found for order id: ${lastOrderId} and trade id: ${trade._id}`);
 
@@ -306,9 +314,14 @@ class Engine {
    */
   getRuleOrders(user, rule) {
     return rh.getOrders(user)
-      .catch(error => logger.error(error))
       .then((orders = []) => orders
-        .filter(o => isString(o.ref_id) && o.ref_id.endsWith(rule.refId)));
+        .filter(o => isString(o.ref_id) && o.ref_id.endsWith(rule.refId)))
+      .catch(error => {
+        if (get(error, 'message').includes('Request was throttled')) {
+          return [];
+        }
+        logger.error(error);
+      });
   }
 
   /**
@@ -386,7 +399,18 @@ class Engine {
 
         return trade.save();
       })
-      .catch(error => logger.error({ message: `Failed to place order for rule ${name}. ${error.message}`}));
+      .catch(error => {
+        if (get(error, 'message', '').includes('Not enough shares to sell')) {
+          trade.sellOrderId = 'not-captured';
+          trade.completed = true;
+          trade.sellPrice = price;
+          trade.sellDate = new Date();
+
+          return trade.save();
+        } else {
+          logger.error({ message: `Failed to place order for rule ${name}. ${error.message}` });
+        }
+      });
   }
 
   /**
