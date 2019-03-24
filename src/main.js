@@ -1,13 +1,13 @@
 const { createServer } = require('http');
 const { ENGINE_PORT, DB } = require('./config/env');
 const createApi = require('./api');
-const Engine = require('./engine/Engine');
+const logger = require('./services/logService');
+const engine = require('./engine/engine');
 const mongoose = require('mongoose');
 
 class App {
   constructor() {
     this.server = createServer();
-    this.engine = new Engine();
 
     mongoose.connect(DB, { useNewUrlParser: true });
     mongoose.Promise = global.Promise;
@@ -19,16 +19,16 @@ class App {
 
   registerEvents() {
     process.on('SIGTERM', () => this.handleExit());
-    this.db.on('error', (e) => console.error('connection error:', e));
+    this.db.on('error', (e) => logger.error(e));
     this.db.once('open', () => this.start());
   }
 
   start() {
     createApi(this.db);
-    // this.server.listen(ENGINE_PORT, () => {
-    //   console.log('Engine running on port:', ENGINE_PORT);
-    //   this.engine.start();
-    // });
+    this.server.listen(ENGINE_PORT, () => {
+      console.log('Engine running on port:', ENGINE_PORT);
+      engine.start();
+    });
   }
 
   handleExit() {

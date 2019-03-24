@@ -118,7 +118,7 @@ class RHService {
    */
   getPosition(accountNumber, instrumentId) {
     const options = {
-      ...this.commonPrivate,
+      ...common,
       uri: `${RBH_API_BASE}/positions/${accountNumber}/${instrumentId}/`,
     };
     return request(options);
@@ -157,7 +157,23 @@ class RHService {
    */
   getWithAuth(uri) {
     const options = {
-      ...this.commonPrivate,
+      ...common,
+      headers: {
+        Authorization: token,
+      },
+      uri,
+    };
+    return request(options);
+  }
+
+  /**
+   * Generic GET request
+   * @param uri
+   * @returns {Promise}
+   */
+  getJSON(uri) {
+    const options = {
+      ...common,
       uri,
     };
     return request(options);

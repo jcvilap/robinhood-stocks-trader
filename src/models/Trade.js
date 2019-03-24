@@ -18,9 +18,13 @@ const Trade = new mongoose.Schema({
    */
   completed: { type: Boolean, default: false, index: true },
   /**
-   * Value that triggers a sale
+   * Risk quote price that could trigger a sale
    */
   riskValue: { type: Number, default: 0 },
+  /**
+   * Quote price that could trigger a sale to lock profits
+   */
+  profitValue: { type: Number },
   /**
    * User id
    */
@@ -28,8 +32,7 @@ const Trade = new mongoose.Schema({
   /**
    * Id of the Rule executing the order
    */
-  rule: { type: mongoose.Schema.Types.ObjectId, ref: 'Rule', required: true },
-
+  rule: { type: mongoose.Schema.Types.ObjectId, ref: 'Rule', required: true, index: true },
   gainPercent: { type: Number },
 }, { versionKey: false });
 

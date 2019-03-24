@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const uuid = require('uuid/v1');
 const crypto = require('crypto');
+const { getInstrumentBySymbol, getWithAuth, getJSON } = require('../services/rhApiService');
+const { ONE_MINUTE, FIVE_SECONDS } = require('../services/utils');
 
 const Rule = new mongoose.Schema({
   /**
@@ -16,7 +18,7 @@ const Rule = new mongoose.Schema({
    * Market exchange
    * @example 'NYSE'
    */
-  exchange: { type: String, required: true },
+  exchange: { type: String },
   /**
    * Override 3 day-trade per week US rule
    */
@@ -24,14 +26,14 @@ const Rule = new mongoose.Schema({
   /**
    * Instrument in RB
    */
-  instrumentId: { type: String, required: true },
-  instrumentUrl : { type: String, required: true },
+  instrumentId: { type: String },
+  instrumentUrl: { type: String },
   /**
    * User id
    */
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   /**
-   * Reference uuid to give the broker. User to filter orders
+   * Reference uuid to give the broker. User also to filter orders
    */
   refId: { type: String, index: { unique: true } },
   /**
@@ -43,23 +45,31 @@ const Rule = new mongoose.Schema({
    */
   enabled: { type: Boolean, index: true },
   /**
-   * Risk management
+   * Frequency in which this rule should be executed
    */
-  risk: {
+  frequency: { type: Number, enum: [ONE_MINUTE, FIVE_SECONDS], index: true, default: ONE_MINUTE },
+  /**
+   * Limit management
+   */
+  limits: {
     /**
      * If true, the limit risk will follow the price, else, it will stay
      * as a getRiskPercentage of the initial value
      */
     followPrice: { type: Boolean, default: true },
-    /**k
+    /**
      * Percentage of the initial value to risk off
      */
-    percentage: { type: Number, default: 1 },
+    riskPercentage: { type: Number, default: 1 },
+    /**
+     * Percentage of the initial value to profit off
+     */
+    profitPercentage: { type: Number, default: null },
   },
   /**
    * Whether to hold the stock overnight or sell all shares before market closes
    */
-  holdOvernight: { type: Boolean, default: false },
+  holdOvernight: { type: Boolean, default: true },
   strategy: {
     /**
      * Pattern to enter a trade
@@ -73,10 +83,25 @@ const Rule = new mongoose.Schema({
 }, { versionKey: false });
 
 // region HOOKS
-Rule.post('save', async function(doc) {
-  if (!doc.refId) {
-    doc.set('refId', crypto.randomBytes(6).toString('hex'));
+/**
+ * Populates refId, instrumentId and instrumentUrl if not present
+ */
+Rule.post('save', async function (doc) {
+  if (!(doc.refId && doc.instrumentId && doc.instrumentUrl)) {
+    if (!doc.refId) {
+      doc.set('refId', crypto.randomBytes(6).toString('hex'));
+    }
 
+    if (!doc.instrumentId || !doc.instrumentUrl) {
+      const instrument = await getInstrumentBySymbol(doc.symbol);
+      doc.set('instrumentUrl', instrument.url);
+      doc.set('instrumentId', instrument.id);
+
+      if (!doc.exchange) {
+        const market = await getJSON(instrument.market);
+        doc.set('exchange', market.acronym);
+      }
+    }
     await doc.save();
   }
 });
@@ -87,7 +112,7 @@ Rule.post('save', async function(doc) {
  * Generates UUID bound to rule
  * @return {string|null}
  */
-Rule.methods.UUID = function() {
+Rule.methods.UUID = function () {
   if (this.refId) {
     const uuidParts = uuid().toString().split('-');
     const lastIndex = uuidParts.length - 1;
@@ -98,13 +123,6 @@ Rule.methods.UUID = function() {
 
   return null;
 };
-// endregion
-
-// region INDEXES
-Rule.index(
-  { symbol: 1, 'strategy.in': 1 },
-  { name: 'unique_symbol_strategy_in', unique: true },
-);
 // endregion
 
 module.exports = mongoose.model('Rule', Rule);

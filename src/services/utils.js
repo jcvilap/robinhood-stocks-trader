@@ -29,15 +29,28 @@ const marketTimes = () => {
 };
 
 /**
- * Calculates the percentage 'riskPercentage' from the 'price'
- * @example price = 100, riskPercentage = 1, risk value = 99
+ * Calculates the percentage from the price
  * @param price
- * @param riskPercentage
- * @param options
+ * @param percentage
+ * @param type
+ */
+const getValueFromPercentage = (price, percentage, type) => {
+  if (!percentage) {
+    return null;
+  }
+
+  const value = price * (percentage / 100);
+  return type === 'risk' ? price - value : price + value;
+};
+
+/**
+ * Calculates the percentage 'profit Percentage' from the 'price'
+ * @example price = 100, profitPercentage = 1, risk value = 99
+ * @param price
+ * @param profitPercentage
  * @returns {number}
  */
-const getRiskFromPercentage = (price, riskPercentage, options = {}) => {
-  const { initial, overbought } = options;
+const getProfitFromPercentage = (price, profitPercentage) => {
   const percentage = (initial || overbought) ? riskPercentage / 2 : riskPercentage;
   return price - (price * (percentage / 100));
 };
@@ -55,12 +68,13 @@ const decrypt = (encrypted) => {
  * Replaces quote values in pattern string and then parses the string into an object
  * @param pattern
  * @param object
+ * @param doNotMatchIfNull
  * @returns {Object}
  */
-const parsePattern = (pattern = null, object) => {
+const parsePattern = (pattern = null, object, doNotMatchIfNull) => {
   if (!pattern) {
     // Non matching query
-    return { __invalidField__: { $exists: true } };
+    return { __invalidField__: { $exists: doNotMatchIfNull } };
   }
 
   const regex = /{{.+?}}/g;
@@ -121,7 +135,7 @@ const FIVE_HOURS = ONE_HOUR * 5;
 
 module.exports = {
   marketTimes,
-  getRiskFromPercentage,
+  getValueFromPercentage,
   encrypt,
   decrypt,
   parsePattern,

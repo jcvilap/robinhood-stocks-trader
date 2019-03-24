@@ -1,7 +1,7 @@
 const { get, uniqBy, uniq, isString } = require('lodash');
 const { Query } = require('mingo');
 
-const { Trade, queries: { getActiveRules, getIncompleteTrades } } = require('../models');
+const { Trade, queries: { getActiveRulesByFrequency, getIncompleteTrades } } = require('../models');
 const rh = require('../services/rhApiService');
 const tv = require('../services/tvApiService');
 const logger = require('../services/logService');
@@ -10,31 +10,38 @@ const {
   marketTimes,
   assert,
   parsePattern,
-  getRiskFromPercentage,
+  getValueFromPercentage,
   FIVE_SECONDS,
   FIVE_HOURS,
   TEN_MINUTES,
+  ONE_MINUTE,
 } = require('../services/utils');
 
-// Todo: move constants to `process.env.js`
+// Todo: maybe move constants to `process.env.js`?
 const OVERRIDE_MARKET_CLOSE = false;
 const MANUALLY_SELL_ALL = false;
 
 class Engine {
   constructor() {
-    this.users = [];
-    this.rules = [];
     this.userTokens = new Map();
     this.userAccounts = new Map();
+    this.users = [];
+    this.rules = {
+      [FIVE_SECONDS]: [],
+      [ONE_MINUTE]: [],
+    };
   }
 
   async start() {
     try {
-      await this.loadRulesAndAccounts();
+      await this.loadRulesAndAccounts(ONE_MINUTE);
+      await this.loadRulesAndAccounts(FIVE_SECONDS);
       await this.detectIntervalChange();
 
-      setInterval(() => this.processFeeds(), FIVE_SECONDS);
-      setInterval(() => this.loadRulesAndAccounts(), FIVE_SECONDS);
+      setInterval(() => this.processFeeds(ONE_MINUTE), ONE_MINUTE);
+      setInterval(() => this.processFeeds(FIVE_SECONDS), FIVE_SECONDS);
+      setInterval(() => this.loadRulesAndAccounts(ONE_MINUTE), ONE_MINUTE);
+      setInterval(() => this.loadRulesAndAccounts(FIVE_SECONDS), FIVE_SECONDS);
 
       logger.log('Engine started.');
     } catch (error) {
@@ -51,7 +58,7 @@ class Engine {
    * - Get fresh user orders
    * @returns {Promise<void>}
    */
-  async loadRulesAndAccounts() {
+  async loadRulesAndAccounts(frequency) {
     const { isMarketClosed } = marketTimes();
 
     if (!OVERRIDE_MARKET_CLOSE && isMarketClosed) {
@@ -59,17 +66,18 @@ class Engine {
     }
 
     // Fetch fresh rules
-    this.rules = await getActiveRules();
+    this.rules[frequency] = await getActiveRulesByFrequency(frequency);
+    const allRules = [...this.rules[FIVE_SECONDS], ...this.rules[ONE_MINUTE]];
 
     // Populate refId if not ready
-    this.rules.forEach(async rule => {
-      if (!rule.refId) {
+    allRules.forEach(async rule => {
+      if (!(rule.refId && rule.instrumentId && rule.instrumentUrl)) {
         await rule.save();
       }
     });
 
     // Fetch fresh users
-    this.users = uniqBy(this.rules.map(rule => ({ ...rule.user.toObject(), _id: rule.user._id.toString() })), '_id');
+    this.users = uniqBy(allRules.map(rule => ({ ...rule.user.toObject(), _id: rule.user._id.toString() })), '_id');
 
     // Store all user tokens for authentication
     const tokenPromises = this.users.map((user, index) => {
@@ -114,12 +122,12 @@ class Engine {
       .then(positions => this.users[index].positions = positions));
 
     // Append rule orders by refId
-    const orderPromises = this.rules.map((rule, index) => {
+    const orderPromises = this.rules[frequency].map((rule, index) => {
       const user = this.users.find(({ _id }) => rule.user._id.equals(_id));
       return this.getRuleOrders(user, rule)
         .then((orders = []) => {
           if (orders.length) {
-            this.rules[index].orders = orders;
+            this.rules[frequency][index].orders = orders;
           }
         });
     });
@@ -128,21 +136,20 @@ class Engine {
       .catch(error => logger.error(error));
   }
 
-  async processFeeds() {
+  async processFeeds(frequency) {
     try {
       const { isMarketClosed, secondsLeftToMarketClosed } = marketTimes();
+      const rules = this.rules[frequency];
 
-      if (!OVERRIDE_MARKET_CLOSE && isMarketClosed) {
+      if ((!OVERRIDE_MARKET_CLOSE && isMarketClosed) || !rules.length) {
         return;
       }
 
-      const symbols = uniq(this.rules.map(r => `${r.exchange}:${r.symbol}`));
+      const symbols = uniq(rules.map(r => `${r.exchange}:${r.symbol}`));
       const [quotes, trades] = await Promise.all([tv.getQuotes(...symbols), getIncompleteTrades()]);
       const promises = [];
 
-      console.log('macd: ', quotes[0].macd, '| signal: ', quotes[0].macdSignal, '| rsi: ', quotes[0].rsi, '| volume: ', quotes[0].volume);
-
-      this.rules.forEach(async rule => {
+      rules.forEach(async rule => {
         try {
           const user = this.users.find(u => rule.user._id.equals(u._id));
           assert(user, `User ${rule.user._id} not found in rule ${rule._id}`);
@@ -182,6 +189,8 @@ class Engine {
               if (lastOrderIsBuy) {
                 trade.buyPrice = price;
                 trade.buyDate = date;
+                trade.riskValue = getValueFromPercentage(price, rule.limits.riskPercentage, 'risk');
+                trade.profitValue = getValueFromPercentage(price, rule.limits.profitPercentage, 'profit');
               }
               else if (lastOrderIsSell) {
                 trade.sellPrice = price;
@@ -194,8 +203,17 @@ class Engine {
                 // Reset trade vars
                 trade = null;
                 lastOrder = null;
+
+                // Exit if rule has no strategy to continue
+                if(!rule.strategy.in) {
+                  rule.enabled = false;
+                  await rule.save();
+                  return;
+                }
               }
             }
+            // Todo BIG: check for partially filled orders!
+
             // Cancel pending(non-filled) order
             else {
               const canceledSuccessfully = await this.cancelLastOrder(user, lastOrder, rule.symbol, rule.name);
@@ -221,16 +239,29 @@ class Engine {
             }
           }
 
-          const { numberOfShares, symbol, holdOvernight, orders } = rule;
+          const parse = (n) => parseFloat(Math.round(n * 100) / 100).toFixed(2);
+
+          console.log(
+            `[ ${rule.name.substring(0, 10)}... ]`,
+            ' => close: ', parse(quote.close),
+            '| entry: ', parse(get(trade, 'buyPrice', 0)),
+            '| risk: ', parse(get(trade, 'riskValue', 0)),
+            '| profit: ', parse(get(trade, 'profitValue', 0)),
+            '| follow: ', get(rule, 'limits.followPrice', false),
+            '\n======================================================================================================='
+          );
+
+          const { numberOfShares, symbol, holdOvernight } = rule;
           const price = quote.close;
-          const isUptick = price > get(quote, 'previous_close');
           const metadata = { ...rule.toObject(), ...user, ...quote };
-          const buyQuery = new Query(parsePattern(get(rule, 'strategy.in.query'), metadata));
-          const sellQuery = new Query(parsePattern(get(rule, 'strategy.out.query'), metadata));
+          const buyQuery = new Query(parsePattern(get(rule, 'strategy.in.query'), metadata, false));
+          const sellQuery = new Query(parsePattern(get(rule, 'strategy.out.query'), metadata, true));
           assert(buyQuery.__criteria || sellQuery.__criteria, `No strategy found for rule ${rule._id}`);
 
           const riskValue = get(trade, 'riskValue', 0);
+          const profitValue = get(trade, 'profitValue', null);
           const riskPriceReached = riskValue > price;
+          const profitPriceReached = profitValue && profitValue < price;
           const commonOptions = { user, symbol, price, numberOfShares, rule, trade };
 
           /**
@@ -263,7 +294,7 @@ class Engine {
           /**
            * SELL pattern
            */
-          else if (lastOrderIsBuy && (riskPriceReached || sellQuery.test(metadata))) {
+          else if (lastOrderIsBuy && (riskPriceReached || profitPriceReached || sellQuery.test(metadata))) {
             promises.push(this.placeOrder({
               ...commonOptions,
               side: 'sell',
@@ -274,14 +305,14 @@ class Engine {
           /**
            * Follow price logic
            */
-          else if (lastOrderIsBuy && get(trade, 'buyPrice') && rule.risk.followPrice && isUptick) {
+          else if (lastOrderIsBuy && get(trade, 'buyPrice') && rule.limits.followPrice) {
             const buyPrice = get(trade, 'buyPrice');
-            const riskPercentage = rule.risk.percentage;
+            const { riskPercentage } = rule.limits;
             const realizedGainPerc = ((price - buyPrice) / buyPrice) * 100;
 
             // Gains are higher than half the risk taken
             if (realizedGainPerc > (riskPercentage / 2)) {
-              const newRiskValue = getRiskFromPercentage(price, riskPercentage);
+              const newRiskValue = getValueFromPercentage(price, riskPercentage, 'risk');
               // Increase risk value only if the new risk is higher
               if (newRiskValue > riskValue) {
                 trade.riskValue = newRiskValue;
@@ -421,7 +452,7 @@ class Engine {
     let prices = null;
     let changeDetected = false;
     while (!changeDetected) {
-      const symbols = uniq(this.rules.map(r => `${r.exchange}:${r.symbol}`));
+      const symbols = uniq(this.rules[FIVE_SECONDS].map(r => `${r.exchange}:${r.symbol}`));
       const quotes = await tv.getQuotes(...symbols);
       const currentPrices = quotes.map(quote => quote.close);
 
@@ -434,4 +465,4 @@ class Engine {
   }
 }
 
-module.exports = Engine;
+module.exports = new Engine();
