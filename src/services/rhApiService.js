@@ -2,6 +2,7 @@ const request = require('request-promise-native');
 const querystring = require('querystring');
 const { RBH_API_BASE } = require('../config/env');
 const Utils = require('../services/utils');
+const moment = require('moment');
 
 const common = { json: true };
 const TOKEN_REFRESH_INTERVAL = 18000000;
@@ -209,10 +210,26 @@ class RHService {
    */
   getAccountResource(accountNumber, resource) {
     const options = {
-      ...this.commonPrivate,
+      ...common,
+      headers: {
+        Authorization: token,
+      },
       uri: `${RBH_API_BASE}/accounts/${accountNumber}/${resource}/`,
     };
     return request(options);
+  }
+
+  getMarketHours() {
+    if (!Utils.isMarketTimesLoaded()) {
+      const options = {
+        ...common,
+        uri: `${RBH_API_BASE}/markets/XASE/hours/${moment().format('YYYY-MM-DD')}/`,
+      };
+      return request(options)
+        .then(data => Utils.marketTimes(data));
+    }
+
+    return Promise.resolve(Utils.marketTimes());
   }
 }
 

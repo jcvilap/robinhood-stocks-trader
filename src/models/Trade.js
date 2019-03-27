@@ -34,6 +34,11 @@ const Trade = new mongoose.Schema({
    */
   rule: { type: mongoose.Schema.Types.ObjectId, ref: 'Rule', required: true, index: true },
   gainPercent: { type: Number },
+  /**
+   * Amount of shares filled thus far
+   */
+  boughtShares: { type: Number, default: 0 },
+  soldShares: { type: Number, default: 0 },
 }, { versionKey: false });
 
 Trade.index(

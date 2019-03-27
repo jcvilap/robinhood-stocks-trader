@@ -59,9 +59,9 @@ class Engine {
    * @returns {Promise<void>}
    */
   async loadRulesAndAccounts(frequency) {
-    const { isMarketClosed } = marketTimes();
+    const { isClosedNow, isExtendedClosedNow } = await rh.getMarketHours();
 
-    if (!OVERRIDE_MARKET_CLOSE && isMarketClosed) {
+    if (!OVERRIDE_MARKET_CLOSE && isClosedNow && isExtendedClosedNow) {
       return;
     }
 
@@ -138,10 +138,10 @@ class Engine {
 
   async processFeeds(frequency) {
     try {
-      const { isMarketClosed, secondsLeftToMarketClosed } = marketTimes();
+      const { isClosedNow, isExtendedClosedNow, secondsLeftToMarketClosed, secondsLeftToExtendedMarketClosed } = await rh.getMarketHours();
       const rules = this.rules[frequency];
 
-      if ((!OVERRIDE_MARKET_CLOSE && isMarketClosed) || !rules.length) {
+      if ((!OVERRIDE_MARKET_CLOSE && isClosedNow /* && isExtendedClosedNow */) || !rules.length) {
         return;
       }
 
@@ -149,7 +149,7 @@ class Engine {
       const [quotes, trades] = await Promise.all([tv.getQuotes(...symbols), getIncompleteTrades()]);
       const promises = [];
 
-      rules.forEach(async rule => {
+      rules.forEach(async (rule, ruleIndex) => {
         try {
           const user = this.users.find(u => rule.user._id.equals(u._id));
           assert(user, `User ${rule.user._id} not found in rule ${rule._id}`);
@@ -160,6 +160,7 @@ class Engine {
           let trade = trades.find(trade => rule._id.equals(trade.rule));
           let lastOrderIsSell = !trade;
           let lastOrderIsBuy = null;
+          let partiallySoldTrade = null;
 
           /**
            * Trade management
@@ -178,7 +179,7 @@ class Engine {
             }
             assert(lastOrder, `Fatal error. Order not found for order id: ${lastOrderId} and trade id: ${trade._id}`);
 
-            const lastOrderIsFilled = get(lastOrder, 'state') === 'filled';
+            const lastOrderIsFilled = ['partially_filled', 'filled'].includes(get(lastOrder, 'state'));
             lastOrderIsSell = get(lastOrder, 'side') === 'sell';
             lastOrderIsBuy = get(lastOrder, 'side') === 'buy';
 
@@ -191,29 +192,45 @@ class Engine {
                 trade.buyDate = date;
                 trade.riskValue = getValueFromPercentage(price, rule.limits.riskPercentage, 'risk');
                 trade.profitValue = getValueFromPercentage(price, rule.limits.profitPercentage, 'profit');
+                trade.boughtShares = Number(get(lastOrder, 'cumulative_quantity'));
+
+                // Partially filled buy orders will cancel unfilled shares
+                if (trade.boughtShares < rule.quantity) {
+                  const canceledSuccessfully = await this.cancelLastOrder(user, lastOrder, rule.symbol, rule.name);
+                  assert(canceledSuccessfully, `Failed to cancel partial buy order: ${lastOrder.id}`);
+                }
               }
               else if (lastOrderIsSell) {
-                trade.sellPrice = price;
-                trade.sellDate = date;
-                trade.completed = true;
+                trade.soldShares = Number(get(lastOrder, 'cumulative_quantity'));
 
-                // Save and close trade
-                await trade.save();
+                // Partially filled sell orders will cancel unfilled shares and try to resell
+                if (trade.soldShares < trade.boughtShares) {
+                  const canceledSuccessfully = await this.cancelLastOrder(user, lastOrder, rule.symbol, rule.name);
+                  assert(canceledSuccessfully, `Failed to cancel partial sell  order: ${lastOrder.id}`);
+                } else {
+                  trade.sellPrice = price;
+                  trade.sellDate = date;
+                  trade.completed = true;
 
-                // Reset trade vars
-                trade = null;
-                lastOrder = null;
+                  // Save and close trade
+                  await trade.save();
 
-                // Exit if rule has no strategy to continue
-                if(!rule.strategy.in) {
-                  rule.enabled = false;
-                  await rule.save();
-                  return;
+                  // Reset trade vars
+                  trade = null;
+                  lastOrder = null;
+
+                  // Exit if rule has no strategy to continue
+                  if(!rule.strategy.in) {
+                    rule.enabled = false;
+                    await rule.save();
+
+                    // Remove rule form active rules and exit
+                    this.rules[frequency].splice(ruleIndex, 1);
+                    return;
+                  }
                 }
               }
             }
-            // Todo BIG: check for partially filled orders!
-
             // Cancel pending(non-filled) order
             else {
               const canceledSuccessfully = await this.cancelLastOrder(user, lastOrder, rule.symbol, rule.name);
@@ -240,18 +257,30 @@ class Engine {
           }
 
           const parse = (n) => parseFloat(Math.round(n * 100) / 100).toFixed(2);
-
           console.log(
-            `[ ${rule.name.substring(0, 10)}... ]`,
+            `[ ${rule.name.substring(0, 15)}... ]`,
             ' => close: ', parse(quote.close),
             '| entry: ', parse(get(trade, 'buyPrice', 0)),
             '| risk: ', parse(get(trade, 'riskValue', 0)),
             '| profit: ', parse(get(trade, 'profitValue', 0)),
             '| follow: ', get(rule, 'limits.followPrice', false),
-            '\n======================================================================================================='
+            '\n==========================================================================================================='
           );
 
-          const { numberOfShares, symbol, holdOvernight } = rule;
+          let numberOfShares;
+          if (get(trade, 'soldShares') && get(trade, 'soldShares') < get(trade, 'boughtShares')) {
+            numberOfShares = get(trade, 'boughtShares') - get(trade, 'soldShares');
+            // Partial sell fill occurred, treat the trade as a buy
+            lastOrderIsBuy = true;
+          } else if (get(trade, 'boughtShares')){
+            // When boughtShares is populated, we want to sell that same number
+            numberOfShares = get(trade, 'boughtShares');
+          } else {
+            // No trade yet, get number of shares from rule
+            numberOfShares = get(rule, 'numberOfShares');
+          }
+
+          const { symbol, holdOvernight } = rule;
           const price = quote.close;
           const metadata = { ...rule.toObject(), ...user, ...quote };
           const buyQuery = new Query(parsePattern(get(rule, 'strategy.in.query'), metadata, false));

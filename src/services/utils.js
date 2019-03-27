@@ -4,29 +4,41 @@ const crypto = require('crypto-js');
 const logger = require('./logService');
 
 const { APP_SECRET } = require('../config/env');
+const marketTimesData = {};
 
 /**
  * US Stock Market standard hours
  * Note: This function does not check for US holidays or after hours
  */
-const marketTimes = () => {
-  // Calculate hours in UTC
-  const now = moment();
-  const marketOpensAt = moment().utc().set({ hour: 14, minute: 30, second: 0 }); // 9:30 AM
-  const marketClosesAt = moment().utc().set({ hour: 21, minute: 0, second: 0 }); // 4:00 PM
-  const isWeekday = ![6, 7].includes(moment().isoWeekday());
-  const isMarketOpen = moment().isBetween(marketOpensAt, marketClosesAt) && isWeekday;
-  const isMarketClosed = !isMarketOpen;
-  const secondsLeftToMarketClosed = moment.duration(marketClosesAt.diff(now)).asSeconds();
+const marketTimes = (data) => {
+  const today = moment().format('YYYY-MM-DD');
 
-  return {
-    marketOpensAt,
-    marketClosesAt,
-    isMarketOpen,
-    isMarketClosed,
-    secondsLeftToMarketClosed,
-  };
+  if (data && !marketTimesData[today]) {
+    marketTimesData[today] = {
+      opensAt: moment(data.opens_at),
+      closesAt: moment(data.closes_at),
+      extendedOpensAt: moment(data.extended_opens_at),
+      extendedClosesAt: moment(data.extended_closes_at),
+      isMarketOpenToday: data.is_open,
+      isMarketClosedToday: !data.is_open,
+    };
+  }
+
+  const marketTimes = marketTimesData[today];
+  const now = moment();
+
+  marketTimes.secondsLeftToMarketClosed = marketTimes.isMarketOpenToday ?
+    moment.duration(marketTimes.closesAt.diff(now)).asSeconds() : 0;
+  marketTimes.secondsLeftToExtendedMarketClosed = marketTimes.isMarketOpenToday ?
+    moment.duration(marketTimes.extendedClosesAt.diff(now)).asSeconds() : 0;
+  marketTimes.isOpenNow = marketTimes.secondsLeftToMarketClosed > 0;
+  marketTimes.isExtendedOpenNow = marketTimes.secondsLeftToExtendedMarketClosed > 0;
+  marketTimes.isExtendedClosedNow = !marketTimes.isExtendedOpenNow;
+
+  return marketTimes;
 };
+
+const isMarketTimesLoaded = () => !!marketTimesData[moment().format('YYYY-MM-DD')];
 
 /**
  * Calculates the percentage from the price
@@ -141,6 +153,7 @@ module.exports = {
   parsePattern,
   assert,
   formatJSON,
+  isMarketTimesLoaded,
   ONE_SECOND,
   FIVE_SECONDS,
   TEN_SECONDS,
