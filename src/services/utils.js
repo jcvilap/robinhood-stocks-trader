@@ -32,6 +32,7 @@ const marketTimes = (data) => {
   marketTimes.secondsLeftToExtendedMarketClosed = marketTimes.isMarketOpenToday ?
     moment.duration(marketTimes.extendedClosesAt.diff(now)).asSeconds() : 0;
   marketTimes.isOpenNow = marketTimes.secondsLeftToMarketClosed > 0;
+  marketTimes.isClosedNow = !marketTimes.isOpenNow;
   marketTimes.isExtendedOpenNow = marketTimes.secondsLeftToExtendedMarketClosed > 0;
   marketTimes.isExtendedClosedNow = !marketTimes.isExtendedOpenNow;
 
