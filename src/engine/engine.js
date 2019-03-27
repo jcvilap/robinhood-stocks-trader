@@ -138,10 +138,10 @@ class Engine {
 
   async processFeeds(frequency) {
     try {
-      const { isClosedNow, isExtendedClosedNow, secondsLeftToMarketClosed, secondsLeftToExtendedMarketClosed } = await rh.getMarketHours();
+      const { isClosedNow, secondsLeftToMarketClosed } = await rh.getMarketHours();
       const rules = this.rules[frequency];
 
-      if ((!OVERRIDE_MARKET_CLOSE && isClosedNow /* && isExtendedClosedNow */) || !rules.length) {
+      if ((!OVERRIDE_MARKET_CLOSE && isClosedNow) || !rules.length) {
         return;
       }
 
@@ -160,7 +160,6 @@ class Engine {
           let trade = trades.find(trade => rule._id.equals(trade.rule));
           let lastOrderIsSell = !trade;
           let lastOrderIsBuy = null;
-          let partiallySoldTrade = null;
 
           /**
            * Trade management
@@ -220,7 +219,7 @@ class Engine {
                   lastOrder = null;
 
                   // Exit if rule has no strategy to continue
-                  if(!rule.strategy.in) {
+                  if (!rule.strategy.in) {
                     rule.enabled = false;
                     await rule.save();
 
@@ -272,7 +271,7 @@ class Engine {
             numberOfShares = get(trade, 'boughtShares') - get(trade, 'soldShares');
             // Partial sell fill occurred, treat the trade as a buy
             lastOrderIsBuy = true;
-          } else if (get(trade, 'boughtShares')){
+          } else if (get(trade, 'boughtShares')) {
             // When boughtShares is populated, we want to sell that same number
             numberOfShares = get(trade, 'boughtShares');
           } else {
