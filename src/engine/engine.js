@@ -1,4 +1,4 @@
-const { get, uniqBy, uniq, isString } = require('lodash');
+const { get, uniqBy, uniq, isString, set } = require('lodash');
 const { Query } = require('mingo');
 
 const { Trade, queries: { getActiveRulesByFrequency, getIncompleteTrades } } = require('../models');
@@ -7,7 +7,6 @@ const tv = require('../services/tvApiService');
 const logger = require('../services/logService');
 
 const {
-  marketTimes,
   assert,
   parsePattern,
   getValueFromPercentage,
@@ -127,7 +126,7 @@ class Engine {
       return this.getRuleOrders(user, rule)
         .then((orders = []) => {
           if (orders.length) {
-            this.rules[frequency][index].orders = orders;
+            set(this.rules, `${frequency}.${index}.orders`, orders);
           }
         });
     });
@@ -323,10 +322,18 @@ class Engine {
            * SELL pattern
            */
           else if (lastOrderIsBuy && (riskPriceReached || profitPriceReached || sellQuery.test(metadata))) {
+            let name = get(rule, 'name');
+
+            if (riskPriceReached) {
+              name += '(Risk reached)';
+            } else if (profitPriceReached) {
+              name += '(Profit reached)';
+            }
+
             promises.push(this.placeOrder({
               ...commonOptions,
               side: 'sell',
-              name: sellQuery.test(quote) ? get(rule, 'name') : `${get(rule, 'name')}(Risk reached)`,
+              name,
             }));
           }
 
@@ -392,7 +399,7 @@ class Engine {
    * @returns {Promise}
    */
   cancelLastOrder(user, lastOrder, symbol, name) {
-    if (get(lastOrder, 'state') === 'canceled') {
+    if (get(lastOrder, 'state') === 'cancelled') {
       return Promise.resolve(true);
     }
 
