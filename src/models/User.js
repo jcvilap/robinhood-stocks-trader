@@ -7,6 +7,7 @@ const User = new mongoose.Schema({
   username: { type: String, required: true },
   password: { type: String, required: true },
   role: { type: String, required: true },
+  useExtendedHours: { type: Boolean, default: false },
   brokerConfig: {
     username: String,
     password: String,

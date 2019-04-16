@@ -7,6 +7,7 @@ const Trade = new mongoose.Schema({
   buyPrice: { type: Number },
   buyOrderId: { type: String },
   buyDate: { type: Date },
+  createdAt: { type: Date },
   /**
    * Price used to exit the trade
    */
@@ -52,10 +53,14 @@ Trade.index(
 
 Trade.pre('save', async function (next) {
   const trade = this;
-  const { sellPrice, buyPrice, completed } = trade;
+  const { sellPrice, buyPrice, completed, createdAt } = trade;
 
   if (completed) {
     trade.gainPercent = ((sellPrice - buyPrice)/buyPrice) * 100;
+  }
+
+  if (!createdAt) {
+    trade.createdAt = new Date();
   }
 
   return next();

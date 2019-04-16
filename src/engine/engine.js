@@ -18,7 +18,9 @@ const {
 
 // Todo: maybe move constants to `process.env.js`?
 const OVERRIDE_MARKET_CLOSE = false;
+const ENABLE_EXTENDED_HOURS = false;
 const MANUALLY_SELL_ALL = false;
+const DEBUG_MODE = true;
 
 class Engine {
   constructor() {
@@ -58,9 +60,10 @@ class Engine {
    * @returns {Promise<void>}
    */
   async loadRulesAndAccounts(frequency) {
-    const { isClosedNow, isExtendedClosedNow } = await rh.getMarketHours();
+    const { isExtendedClosedNow, isClosedNow } = await rh.getMarketHours();
+    const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
 
-    if (!OVERRIDE_MARKET_CLOSE && isClosedNow && isExtendedClosedNow) {
+    if (!OVERRIDE_MARKET_CLOSE && isClosedNow && isMarketClosed) {
       return;
     }
 
@@ -137,10 +140,13 @@ class Engine {
 
   async processFeeds(frequency) {
     try {
-      const { isClosedNow, secondsLeftToMarketClosed } = await rh.getMarketHours();
+      const { isExtendedClosedNow, secondsLeftToExtendedMarketClosed, isClosedNow, secondsLeftToMarketClosed } = await rh.getMarketHours();
+      const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
+      const secondsToMarketClosed = ENABLE_EXTENDED_HOURS ? secondsLeftToExtendedMarketClosed : secondsLeftToMarketClosed;
+      this.rules[frequency] = this.rules[frequency].filter(r => r.enabled);
       const rules = this.rules[frequency];
 
-      if ((!OVERRIDE_MARKET_CLOSE && isClosedNow) || !rules.length) {
+      if ((!OVERRIDE_MARKET_CLOSE && isMarketClosed) || !rules.length) {
         return;
       }
 
@@ -178,14 +184,14 @@ class Engine {
             assert(lastOrder, `Fatal error. Order not found for order id: ${lastOrderId} and trade id: ${trade._id}`);
 
             const lastOrderIsFilled = ['partially_filled', 'filled'].includes(get(lastOrder, 'state'));
-            lastOrderIsSell = get(lastOrder, 'side') === 'sell';
-            lastOrderIsBuy = get(lastOrder, 'side') === 'buy';
+            lastOrderIsSell = lastOrderId === get(trade, 'sellOrderId');
+            lastOrderIsBuy = lastOrderId === get(trade, 'buyOrderId');
 
             if (lastOrderIsFilled) {
               const price = Number(get(lastOrder, 'average_price'));
               const date = new Date(get(lastOrder, 'updated_at'));
 
-              if (lastOrderIsBuy) {
+              if (lastOrderIsBuy && !trade.buyPrice) {
                 trade.buyPrice = price;
                 trade.buyDate = date;
                 trade.riskValue = getValueFromPercentage(price, rule.limits.riskPercentage, 'risk');
@@ -220,10 +226,9 @@ class Engine {
                   // Exit if rule has no strategy to continue
                   if (!rule.strategy.in) {
                     rule.enabled = false;
+                    this.rules[frequency][ruleIndex].enabled = false;
                     await rule.save();
 
-                    // Remove rule form active rules and exit
-                    this.rules[frequency].splice(ruleIndex, 1);
                     return;
                   }
                 }
@@ -254,16 +259,9 @@ class Engine {
             }
           }
 
-          const parse = (n) => parseFloat(Math.round(n * 100) / 100).toFixed(2);
-          console.log(
-            `[ ${rule.name.substring(0, 15)}... ]`,
-            ' => close: ', parse(quote.close),
-            '| entry: ', parse(get(trade, 'buyPrice', 0)),
-            '| risk: ', parse(get(trade, 'riskValue', 0)),
-            '| profit: ', parse(get(trade, 'profitValue', 0)),
-            '| follow: ', get(rule, 'limits.followPrice', false),
-            '\n==========================================================================================================='
-          );
+          if (DEBUG_MODE) {
+            logger.logMeta(trade, quote, rule);
+          }
 
           let numberOfShares;
           if (get(trade, 'soldShares') && get(trade, 'soldShares') < get(trade, 'boughtShares')) {
@@ -295,7 +293,7 @@ class Engine {
            * End of day is approaching (4PM EST), sell all shares in the last 30sec if rule is not holding overnight
            */
           if (MANUALLY_SELL_ALL || !OVERRIDE_MARKET_CLOSE &&
-            (secondsLeftToMarketClosed < 30 && !holdOvernight)) {
+            (secondsToMarketClosed < 30 && !holdOvernight)) {
             if (lastOrderIsBuy) {
               promises.push(this.placeOrder({
                 ...commonOptions,
@@ -399,7 +397,7 @@ class Engine {
    * @returns {Promise}
    */
   cancelLastOrder(user, lastOrder, symbol, name) {
-    if (get(lastOrder, 'state') === 'cancelled') {
+    if (['canceled', 'cancelled'].includes(get(lastOrder, 'state'))) {
       return Promise.resolve(true);
     }
 
@@ -466,16 +464,7 @@ class Engine {
         return trade.save();
       })
       .catch(error => {
-        if (get(error, 'message', '').includes('Not enough shares to sell')) {
-          trade.sellOrderId = 'not-captured';
-          trade.completed = true;
-          trade.sellPrice = price;
-          trade.sellDate = new Date();
-
-          return trade.save();
-        } else {
-          logger.error({ message: `Failed to place order for rule ${name}. ${error.message}` });
-        }
+        logger.error({ message: `Failed to place order for rule ${name}. ${error.message}` });
       });
   }
 

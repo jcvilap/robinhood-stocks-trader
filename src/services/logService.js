@@ -38,6 +38,22 @@ class LogService {
     this.logger.send(message);
     console.log(message);
   }
+
+  logMeta(trade, quote, rule) {
+    console.log(
+      `[ ${rule.name.substring(0, 15)}... ]`,
+      ' => close: ', this.parse(quote.close),
+      '| entry: ', this.parse(get(trade, 'buyPrice', 0)),
+      '| risk: ', this.parse(get(trade, 'riskValue', 0)),
+      '| profit: ', this.parse(get(trade, 'profitValue', 0)),
+      '| follow: ', get(rule, 'limits.followPrice', false),
+      '\n==========================================================================================================='
+    );
+  }
+
+  parse(n) {
+    return parseFloat(Math.round(n * 100) / 100).toFixed(2);
+  }
 }
 
 module.exports = new LogService();
