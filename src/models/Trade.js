@@ -27,6 +27,10 @@ const Trade = new mongoose.Schema({
    */
   profitValue: { type: Number },
   /**
+   * Whether the target percentage profit was reached
+   */
+  targetReached: { type: Boolean, default: false },
+  /**
    * User id
    */
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

@@ -338,13 +338,25 @@ class Engine {
           /**
            * Follow price logic
            */
-          else if (lastOrderIsBuy && get(trade, 'buyPrice') && rule.limits.followPrice) {
+          else if (lastOrderIsBuy && get(trade, 'buyPrice') && rule.limits.followPrice.enabled) {
             const buyPrice = get(trade, 'buyPrice');
-            const { riskPercentage } = rule.limits;
             const realizedGainPerc = ((price - buyPrice) / buyPrice) * 100;
+            const { riskPercentage, followPrice } = rule.limits;
+            const { targetPercentage, riskPercentageAfterTargetReached } = followPrice;
 
-            // Gains are higher than half the risk taken
-            if (realizedGainPerc > (riskPercentage / 2)) {
+            if (!trade.targetReached && targetPercentage <= realizedGainPerc) {
+              trade.targetReached = true;
+            }
+
+            if (trade.targetReached) {
+              // Target price is reached, use riskPercentageAfterTargetReached as new risk limit
+              const newRiskValue = getValueFromPercentage(price, riskPercentageAfterTargetReached, 'risk');
+              // Increase risk value only if the new risk is higher
+              if (newRiskValue > riskValue) {
+                trade.riskValue = newRiskValue;
+              }
+            } else if (realizedGainPerc > (riskPercentage / 2)) {
+              // Gains are higher than half the risk taken
               const newRiskValue = getValueFromPercentage(price, riskPercentage, 'risk');
               // Increase risk value only if the new risk is higher
               if (newRiskValue > riskValue) {

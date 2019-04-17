@@ -52,11 +52,20 @@ const Rule = new mongoose.Schema({
    * Limit management
    */
   limits: {
-    /**
-     * If true, the limit risk will follow the price, else, it will stay
-     * as a getRiskPercentage of the initial value
-     */
-    followPrice: { type: Boolean, default: true },
+    followPrice: {
+      /**
+       * Whether to move the risk up as the price rises
+       */
+      enabled: { type: Boolean, default: false },
+      /**
+       * Value where after reached, the risk percentage will shortened
+       */
+      targetPercentage: Number,
+      /**
+       * Risk set after targetPercentage is reached
+       */
+      riskPercentageAfterTargetReached: Number
+    },
     /**
      * Percentage of the initial value to risk off
      */
