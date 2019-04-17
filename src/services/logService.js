@@ -41,15 +41,22 @@ class LogService {
 
   logMeta(trade, quote, rule) {
     console.log(
-      `[ ${rule.name.substring(0, 15)}... ]`,
-      ' => close: ', this.parse(quote.close),
-      '| entry: ', this.parse(get(trade, 'buyPrice', 0)),
-      '| risk: ', this.parse(get(trade, 'riskValue', 0)),
-      '| profit: ', this.parse(get(trade, 'profitValue', 0)),
-      '| follow: ', get(rule, 'limits.followPrice.enabled', false),
-      '| trade: ', get(trade, 'targetReached', false),
-      '| time: ', (new Date()).toLocaleTimeString(),
-      '\n=========================================================================================================================================='
+      `[${rule.name.substring(0, 15)}...]`,
+      ' => close:', this.parse(quote.close),
+      '| entry:', this.parse(get(trade, 'buyPrice', 0)),
+      '| risk:', this.parse(get(trade, 'riskValue', 0)),
+      '| profit:', this.parse(get(trade, 'profitValue', 0)),
+      '| follow:', get(rule, 'limits.followPrice.enabled', false),
+      '| targetReached:', get(trade, 'targetReached', false),
+      '| time:', (new Date()).toLocaleTimeString(),
+      '\n========================================================================================================================================================='
+    );
+  }
+
+  ping() {
+    console.log(
+      '[ping...] | time:', (new Date()).toLocaleTimeString(),
+      '\n========================================================================================================================================================='
     );
   }
 
