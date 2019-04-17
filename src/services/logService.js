@@ -46,7 +46,8 @@ class LogService {
       '| entry: ', this.parse(get(trade, 'buyPrice', 0)),
       '| risk: ', this.parse(get(trade, 'riskValue', 0)),
       '| profit: ', this.parse(get(trade, 'profitValue', 0)),
-      '| follow: ', get(rule, 'limits.followPrice', false),
+      '| follow: ', get(rule, 'limits.followPrice.enabled', false),
+      '| time: ', (new Date()).toDateString(),
       '\n==========================================================================================================='
     );
   }
