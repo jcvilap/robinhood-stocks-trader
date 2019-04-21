@@ -147,6 +147,7 @@ class Engine {
       const rules = this.rules[frequency];
 
       if ((!OVERRIDE_MARKET_CLOSE && isMarketClosed) || !rules.length) {
+        logger.ping();
         return;
       }
 
