@@ -21,6 +21,7 @@ const OVERRIDE_MARKET_CLOSE = false;
 const ENABLE_EXTENDED_HOURS = false;
 const MANUALLY_SELL_ALL = false;
 const DEBUG_MODE = true;
+const ENV = 'production';
 
 class Engine {
   constructor() {
@@ -43,6 +44,9 @@ class Engine {
       setInterval(() => this.processFeeds(FIVE_SECONDS), FIVE_SECONDS);
       setInterval(() => this.loadRulesAndAccounts(ONE_MINUTE), ONE_MINUTE);
       setInterval(() => this.loadRulesAndAccounts(FIVE_SECONDS), FIVE_SECONDS);
+      if (ENV === 'production') {
+        setInterval(() => logger.ping(), ONE_MINUTE);
+      }
 
       logger.log('Engine started.');
     } catch (error) {
@@ -147,9 +151,6 @@ class Engine {
       const rules = this.rules[frequency];
 
       if ((!OVERRIDE_MARKET_CLOSE && isMarketClosed) || !rules.length) {
-        if (rules.length){
-          logger.ping();
-        }
         return;
       }
 

@@ -54,10 +54,9 @@ class LogService {
   }
 
   ping() {
-    console.log(
-      '[ping...] | time:', (new Date()).toLocaleTimeString(),
-      '\n========================================================================================================================================================='
-    );
+    const message = `[ping...] | time:${(new Date()).toLocaleTimeString()}`;
+    this.logger.send(message);
+    console.log(message);
   }
 
   parse(n) {
