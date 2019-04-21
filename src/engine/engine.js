@@ -224,7 +224,7 @@ class Engine {
                   lastOrder = null;
 
                   // Exit if rule has no strategy to continue
-                  if (!rule.strategy.in) {
+                  if (rule.disableAfterSold || !rule.strategy.in) {
                     rule.enabled = false;
                     this.rules[frequency][ruleIndex].enabled = false;
                     await rule.save();

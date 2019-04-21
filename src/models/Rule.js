@@ -74,6 +74,10 @@ const Rule = new mongoose.Schema({
      * Percentage of the initial value to profit off
      */
     profitPercentage: { type: Number, default: null },
+    /**
+     * If true, rule becomes disabled after a sell happens
+     */
+    disableAfterSold: { type: Boolean, default: false },
   },
   /**
    * Whether to hold the stock overnight or sell all shares before market closes
