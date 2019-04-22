@@ -1,7 +1,7 @@
-const { get, uniqBy, uniq, isString, set } = require('lodash');
-const { Query } = require('mingo');
+const {get, uniqBy, uniq, isString, set} = require('lodash');
+const {Query} = require('mingo');
 
-const { Trade, queries: { getActiveRulesByFrequency, getIncompleteTrades } } = require('../models');
+const {Trade, queries: {getActiveRulesByFrequency, getIncompleteTrades}} = require('../models');
 const rh = require('../services/rhApiService');
 const tv = require('../services/tvApiService');
 const logger = require('../services/logService');
@@ -64,7 +64,7 @@ class Engine {
    * @returns {Promise<void>}
    */
   async loadRulesAndAccounts(frequency) {
-    const { isExtendedClosedNow, isClosedNow } = await rh.getMarketHours();
+    const {isExtendedClosedNow, isClosedNow} = await rh.getMarketHours();
     const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
 
     if (!OVERRIDE_MARKET_CLOSE && isClosedNow && isMarketClosed) {
@@ -83,7 +83,7 @@ class Engine {
     });
 
     // Fetch fresh users
-    this.users = uniqBy(allRules.map(rule => ({ ...rule.user.toObject(), _id: rule.user._id.toString() })), '_id');
+    this.users = uniqBy(allRules.map(rule => ({...rule.user.toObject(), _id: rule.user._id.toString()})), '_id');
 
     // Store all user tokens for authentication
     const tokenPromises = this.users.map((user, index) => {
@@ -94,7 +94,7 @@ class Engine {
         return rh.auth(user.brokerConfig)
           .then(token => {
             this.users[index].token = token;
-            this.userTokens.set(user._id.toString(), { token, date: new Date() });
+            this.userTokens.set(user._id.toString(), {token, date: new Date()});
           });
       }
 
@@ -114,7 +114,7 @@ class Engine {
         return rh.getAccount(user)
           .then(account => {
             this.users[index].account = account;
-            this.userAccounts.set(user._id.toString(), { account, date: new Date() });
+            this.userAccounts.set(user._id.toString(), {account, date: new Date()});
           });
       }
 
@@ -129,7 +129,7 @@ class Engine {
 
     // Append rule orders by refId
     const orderPromises = this.rules[frequency].map((rule, index) => {
-      const user = this.users.find(({ _id }) => rule.user._id.equals(_id));
+      const user = this.users.find(({_id}) => rule.user._id.equals(_id));
       return this.getRuleOrders(user, rule)
         .then((orders = []) => {
           if (orders.length) {
@@ -144,7 +144,7 @@ class Engine {
 
   async processFeeds(frequency) {
     try {
-      const { isExtendedClosedNow, secondsLeftToExtendedMarketClosed, isClosedNow, secondsLeftToMarketClosed } = await rh.getMarketHours();
+      const {isExtendedClosedNow, secondsLeftToExtendedMarketClosed, isClosedNow, secondsLeftToMarketClosed} = await rh.getMarketHours();
       const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
       const secondsToMarketClosed = ENABLE_EXTENDED_HOURS ? secondsLeftToExtendedMarketClosed : secondsLeftToMarketClosed;
       this.rules[frequency] = this.rules[frequency].filter(r => r.enabled);
@@ -177,7 +177,7 @@ class Engine {
             const lastOrderId = get(trade, 'sellOrderId') || get(trade, 'buyOrderId');
             assert(lastOrderId, `Trade without sellOrderId or buyOrderId found. Id: ${trade._id}`);
 
-            let lastOrder = get(rule, 'orders', []).find(({ id }) => id === lastOrderId);
+            let lastOrder = get(rule, 'orders', []).find(({id}) => id === lastOrderId);
             if (!lastOrder) {
               // Get fresh rule orders
               [rule.orders, lastOrder] = await Promise.all([
@@ -207,8 +207,7 @@ class Engine {
                   const canceledSuccessfully = await this.cancelLastOrder(user, lastOrder, rule.symbol, rule.name);
                   assert(canceledSuccessfully, `Failed to cancel partial buy order: ${lastOrder.id}`);
                 }
-              }
-              else if (lastOrderIsSell) {
+              } else if (lastOrderIsSell) {
                 trade.soldShares = Number(get(lastOrder, 'cumulative_quantity'));
 
                 // Partially filled sell orders will cancel unfilled shares and try to resell
@@ -250,8 +249,7 @@ class Engine {
                 trade = null;
                 lastOrderIsBuy = false;
                 lastOrderIsSell = true;
-              }
-              else if (lastOrderIsSell) {
+              } else if (lastOrderIsSell) {
                 trade.sellPrice = undefined;
                 trade.sellDate = undefined;
                 trade.sellOrderId = undefined;
@@ -280,9 +278,9 @@ class Engine {
             numberOfShares = get(rule, 'numberOfShares');
           }
 
-          const { symbol, holdOvernight } = rule;
+          const {symbol, holdOvernight} = rule;
           const price = quote.close;
-          const metadata = { ...rule.toObject(), ...user, ...quote };
+          const metadata = {...rule.toObject(), ...user, ...quote};
           const buyQuery = new Query(parsePattern(get(rule, 'strategy.in.query'), metadata, false));
           const sellQuery = new Query(parsePattern(get(rule, 'strategy.out.query'), metadata, true));
           assert(buyQuery.__criteria || sellQuery.__criteria, `No strategy found for rule ${rule._id}`);
@@ -291,7 +289,7 @@ class Engine {
           const profitValue = get(trade, 'profitValue', null);
           const riskPriceReached = riskValue > price;
           const profitPriceReached = profitValue && profitValue < price;
-          const commonOptions = { user, symbol, price, numberOfShares, rule, trade };
+          const commonOptions = {user, symbol, price, numberOfShares, rule, trade};
 
           /**
            * End of day is approaching (4PM EST), sell all shares in the last 30sec if rule is not holding overnight
@@ -345,8 +343,8 @@ class Engine {
           else if (lastOrderIsBuy && get(trade, 'buyPrice') && rule.limits.followPrice.enabled) {
             const buyPrice = get(trade, 'buyPrice');
             const realizedGainPerc = ((price - buyPrice) / buyPrice) * 100;
-            const { riskPercentage, followPrice } = rule.limits;
-            const { targetPercentage, riskPercentageAfterTargetReached } = followPrice;
+            const {riskPercentage, followPrice} = rule.limits;
+            const {targetPercentage, riskPercentageAfterTargetReached} = followPrice;
 
             if (!trade.targetReached && targetPercentage <= realizedGainPerc) {
               trade.targetReached = true;
@@ -419,7 +417,7 @@ class Engine {
 
     if (get(lastOrder, 'state') !== 'filled' && get(lastOrder, 'cancel')) {
       return rh.postWithAuth(user, lastOrder.cancel)
-        .then(() => logger.orderCanceled({ ...lastOrder, symbol, name }))
+        .then(() => logger.orderCanceled({...lastOrder, symbol, name}))
         .then(() => true)
         .catch(() => false);
     }
@@ -439,7 +437,7 @@ class Engine {
    * @param trade
    * @returns {Promise}
    */
-  async placeOrder({ side, user, symbol, price, numberOfShares, rule, name, trade }) {
+  async placeOrder({side, user, symbol, price, numberOfShares, rule, name, trade}) {
     let finalPrice;
     if (side === 'buy') {
       // Buy 0.01% higher than market price to get an easier fill
@@ -465,12 +463,12 @@ class Engine {
 
     return rh.placeOrder(user, options)
       .then(order => {
-        logger.orderPlaced({ symbol, price, ...order, name });
+        logger.orderPlaced({symbol, price, ...order, name});
 
         // Update order id on trade
         if (side === 'buy') {
           if (!trade) {
-            trade = new Trade({ rule: rule._id.toString(), user: user._id.toString() });
+            trade = new Trade({rule: rule._id.toString(), user: user._id.toString()});
           }
           trade.buyOrderId = order.id;
         } else {
@@ -479,8 +477,26 @@ class Engine {
 
         return trade.save();
       })
-      .catch(error => {
-        logger.error({ message: `Failed to place order for rule ${name}. ${error.message}` });
+      .catch(async error => {
+        if ((get(error, 'message', '').includes('Not enough shares to sell'))) {
+          const positions = get(user, 'positions', []).find(p => p.instrument === rule.instrumentUrl);
+          if (!Number(get(positions, 'quantity', 0))) {
+            const promises = [];
+            if (rule.disableAfterSold || !rule.strategy.in) {
+              rule.enabled = false;
+              promises.push(rule.save());
+            }
+            trade.sellOrderId = 'not-captured';
+            trade.completed = true;
+            trade.sellPrice = price;
+            trade.sellDate = new Date();
+            promises.push(trade.save());
+
+            await Promise.all(promises);
+          }
+        } else {
+          logger.error({message: `Failed to place order for rule ${name}. ${error.message}`});
+        }
       });
   }
 
