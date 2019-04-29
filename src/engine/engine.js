@@ -28,6 +28,7 @@ class Engine {
   constructor() {
     this.userTokens = new Map();
     this.userAccounts = new Map();
+    this.orderPendingMap = new Map();
     this.users = [];
     this.rules = {
       [FIVE_SECONDS]: [],
@@ -146,7 +147,7 @@ class Engine {
       const {isExtendedClosedNow, secondsLeftToExtendedMarketClosed, isClosedNow, secondsLeftToMarketClosed} = await rh.getMarketHours();
       const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
       const secondsToMarketClosed = ENABLE_EXTENDED_HOURS ? secondsLeftToExtendedMarketClosed : secondsLeftToMarketClosed;
-      this.rules[frequency] = this.rules[frequency].filter(r => r.enabled);
+      this.rules[frequency] = this.rules[frequency].filter(r => r.enabled && !this.orderPendingMap.has(r._id.toString()));
       const rules = this.rules[frequency];
 
       if ((!OVERRIDE_MARKET_CLOSE && isMarketClosed) || !rules.length) {
@@ -439,6 +440,11 @@ class Engine {
    * @returns {Promise}
    */
   async placeOrder({side, user, symbol, price, numberOfShares, rule, name, trade}) {
+    const ruleId = rule._id.toString();
+    if (!ruleId || this.orderPendingMap.has(ruleId)) {
+      return;
+    }
+
     let finalPrice;
     if (side === 'buy') {
       // Buy 0.01% higher than market price to get an easier fill
@@ -461,21 +467,21 @@ class Engine {
       override_day_trade_checks: rule.overrideDayTradeChecks,
       ref_id: rule.UUID()
     };
-
-    return rh.placeOrder(user, options)
+    const promise =  rh.placeOrder(user, options)
       .then(order => {
         logger.orderPlaced({symbol, price, ...order, name});
 
         // Update order id on trade
         if (side === 'buy') {
           if (!trade) {
-            trade = new Trade({rule: rule._id.toString(), user: user._id.toString()});
+            trade = new Trade({rule: ruleId, user: user._id.toString()});
           }
           trade.buyOrderId = order.id;
         } else {
           trade.sellOrderId = order.id;
         }
 
+        this.orderPendingMap.delete(ruleId);
         return trade.save();
       })
       .catch(async error => {
@@ -501,8 +507,13 @@ class Engine {
           await Promise.all(promises);
         }
 
+        this.orderPendingMap.delete(ruleId);
         logger.error({message: `Failed to place order for rule ${name}. ${error.message}`});
       });
+
+    this.orderPendingMap.set(ruleId, promise);
+
+    return promise;
   }
 
   /**
