@@ -416,8 +416,8 @@ class Engine {
 
     if (get(lastOrder, 'state') !== 'filled' && get(lastOrder, 'cancel')) {
       return rh.postWithAuth(user, lastOrder.cancel)
-        .then(() => {
-          logger.orderCanceled({...lastOrder, symbol, name});
+        .then(json => {
+          logger.orderCanceled({...lastOrder, symbol, name, json});
           return true;
         })
         .catch(() => false);
@@ -479,10 +479,10 @@ class Engine {
         return trade.save();
       })
       .catch(async error => {
+        const promises = [];
         if ((get(error, 'message', '').includes('Not enough shares to sell'))) {
           const positions = get(user, 'positions', []).find(p => p.instrument === rule.instrumentUrl);
           if (!Number(get(positions, 'quantity', 0))) {
-            const promises = [];
             if (rule.disableAfterSold || !rule.strategy.in) {
               rule.enabled = false;
               promises.push(rule.save());
@@ -492,12 +492,16 @@ class Engine {
             trade.sellPrice = price;
             trade.sellDate = new Date();
             promises.push(trade.save());
-
-            await Promise.all(promises);
           }
-        } else {
-          logger.error({message: `Failed to place order for rule ${name}. ${error.message}`});
+        } else if ((get(error, 'message', '').includes('Instrument cannot be traded'))) {
+          rule.enabled = false;
+          promises.push(rule.save());
         }
+        if (promises.length) {
+          await Promise.all(promises);
+        }
+
+        logger.error({message: `Failed to place order for rule ${name}. ${error.message}`});
       });
   }
 

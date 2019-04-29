@@ -28,8 +28,8 @@ class LogService {
     console.log(`*ORDER PLACED =>* ${message}`);
   }
 
-  orderCanceled({ symbol, side, name, date = new Date(), price }) {
-    const message = `${symbol} | ${side} | ${name} | $${Number(price).toFixed(3)} | ${moment(date).format('MM/DD/YY h:mm:ssa')}`;
+  orderCanceled({ symbol, side, name, date = new Date(), price, json }) {
+    const message = `${symbol} | ${side} | ${name} | $${Number(price).toFixed(3)} | ${moment(date).format('MM/DD/YY h:mm:ssa')} | ${json}`;
     this.logger.send(`:skull: *ORDER CANCELED =>* ${message}`);
     console.log(`*ORDER CANCELED =>* ${message}`);
   }
