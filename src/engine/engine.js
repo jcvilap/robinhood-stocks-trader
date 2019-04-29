@@ -1,4 +1,5 @@
 const {get, uniqBy, uniq, isString, set} = require('lodash');
+const moment = require('moment');
 const {Query} = require('mingo');
 
 const {Trade, queries: {getActiveRulesByFrequency, getIncompleteTrades}} = require('../models');
@@ -44,11 +45,9 @@ class Engine {
       setInterval(() => this.processFeeds(FIVE_SECONDS), FIVE_SECONDS);
       setInterval(() => this.loadRulesAndAccounts(ONE_MINUTE), ONE_MINUTE);
       setInterval(() => this.loadRulesAndAccounts(FIVE_SECONDS), FIVE_SECONDS);
-      if (ENV === 'production') {
-        setInterval(() => logger.ping(), ONE_MINUTE);
-      }
 
       logger.log('Engine started.');
+      this.ping();
     } catch (error) {
       logger.error(error);
     }
@@ -417,8 +416,10 @@ class Engine {
 
     if (get(lastOrder, 'state') !== 'filled' && get(lastOrder, 'cancel')) {
       return rh.postWithAuth(user, lastOrder.cancel)
-        .then(() => logger.orderCanceled({...lastOrder, symbol, name}))
-        .then(() => true)
+        .then(() => {
+          logger.orderCanceled({...lastOrder, symbol, name});
+          return true;
+        })
         .catch(() => false);
     }
 
@@ -517,6 +518,22 @@ class Engine {
       }
 
       changeDetected = currentPrices !== prices;
+    }
+  }
+
+  /**
+   * Ping only when market is open or every half an our when market is closed
+   * @returns {Promise<void>}
+   */
+  async ping() {
+    if (ENV === 'production') {
+      setInterval(async () => {
+        const {isExtendedClosedNow, isClosedNow} = await rh.getMarketHours();
+        const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
+        if (!isMarketClosed || moment().minutes() % 30 === 0) {
+          logger.ping();
+        }
+      }, ONE_MINUTE);
     }
   }
 }
