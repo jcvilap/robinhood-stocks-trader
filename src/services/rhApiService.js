@@ -5,7 +5,6 @@ const Utils = require('../services/utils');
 const moment = require('moment');
 
 const common = { json: true };
-const TOKEN_REFRESH_INTERVAL = 18000000;
 
 class RHService {
   /**
@@ -22,7 +21,6 @@ class RHService {
         password: Utils.decrypt(config.password),
         grant_type: 'password',
         scope: 'internal',
-        expires_in: TOKEN_REFRESH_INTERVAL // 5h
       }
     };
     return request(options)

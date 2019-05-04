@@ -13,6 +13,7 @@ const User = new mongoose.Schema({
     password: String,
     client_id: String,
     name: String,
+    device_token: String,
   },
   emailConfig: {
     enabled: String,

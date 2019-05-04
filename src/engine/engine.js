@@ -1,8 +1,8 @@
-const {get, uniqBy, uniq, isString, set} = require('lodash');
+const { get, uniq, isString, set } = require('lodash');
 const moment = require('moment');
-const {Query} = require('mingo');
+const { Query } = require('mingo');
 
-const {Trade, queries: {getActiveRulesByFrequency, getIncompleteTrades}} = require('../models');
+const { Trade, User, queries: { getActiveRulesByFrequency, getIncompleteTrades } } = require('../models');
 const rh = require('../services/rhApiService');
 const tv = require('../services/tvApiService');
 const logger = require('../services/logService');
@@ -11,10 +11,11 @@ const {
   assert,
   parsePattern,
   getValueFromPercentage,
+  idToString,
   FIVE_SECONDS,
-  FIVE_HOURS,
   TEN_MINUTES,
   ONE_MINUTE,
+  ONE_AND_A_HALF_MINUTES,
 } = require('../services/utils');
 
 // Todo: maybe move constants to `process.env.js`?
@@ -26,9 +27,9 @@ const ENV = 'production';
 
 class Engine {
   constructor() {
-    this.userTokens = new Map();
     this.userAccounts = new Map();
     this.orderPendingMap = new Map();
+    this.marketHours = {};
     this.users = [];
     this.rules = {
       [FIVE_SECONDS]: [],
@@ -38,14 +39,18 @@ class Engine {
 
   async start() {
     try {
-      await this.loadRulesAndAccounts(ONE_MINUTE);
+      await this.populateMarketHours();
+      await this.populateAuthTokens();
       await this.loadRulesAndAccounts(FIVE_SECONDS);
+      await this.loadRulesAndAccounts(ONE_MINUTE);
       await this.detectIntervalChange();
 
-      setInterval(() => this.processFeeds(ONE_MINUTE), ONE_MINUTE);
-      setInterval(() => this.processFeeds(FIVE_SECONDS), FIVE_SECONDS);
-      setInterval(() => this.loadRulesAndAccounts(ONE_MINUTE), ONE_MINUTE);
+      setInterval(() => this.populateMarketHours(), FIVE_SECONDS);
+      setInterval(() => this.populateAuthTokens(), ONE_AND_A_HALF_MINUTES);
       setInterval(() => this.loadRulesAndAccounts(FIVE_SECONDS), FIVE_SECONDS);
+      setInterval(() => this.loadRulesAndAccounts(ONE_MINUTE), ONE_MINUTE);
+      setInterval(() => this.processFeeds(FIVE_SECONDS), FIVE_SECONDS);
+      setInterval(() => this.processFeeds(ONE_MINUTE), ONE_MINUTE);
 
       logger.log('Engine started.');
       this.ping();
@@ -64,7 +69,7 @@ class Engine {
    * @returns {Promise<void>}
    */
   async loadRulesAndAccounts(frequency) {
-    const {isExtendedClosedNow, isClosedNow} = await rh.getMarketHours();
+    const { isExtendedClosedNow, isClosedNow } = this.marketHours;
     const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
 
     if (!OVERRIDE_MARKET_CLOSE && isClosedNow && isMarketClosed) {
@@ -82,29 +87,6 @@ class Engine {
       }
     });
 
-    // Fetch fresh users
-    this.users = uniqBy(allRules.map(rule => ({...rule.user.toObject(), _id: rule.user._id.toString()})), '_id');
-
-    // Store all user tokens for authentication
-    const tokenPromises = this.users.map((user, index) => {
-      const userToken = this.userTokens.get(user._id.toString());
-
-      // Refresh token only after 5 hours
-      if (!userToken || (((new Date()) - new Date(userToken.date)) >= FIVE_HOURS)) {
-        return rh.auth(user.brokerConfig)
-          .then(token => {
-            this.users[index].token = token;
-            this.userTokens.set(user._id.toString(), {token, date: new Date()});
-          });
-      }
-
-      // Append token
-      user.token = userToken.token;
-      return null;
-    }).filter(u => u);
-
-    await Promise.all(tokenPromises);
-
     // Append user accounts
     const accountPromises = this.users.map((user, index) => {
       const userAccount = this.userAccounts.get(user._id.toString());
@@ -114,13 +96,9 @@ class Engine {
         return rh.getAccount(user)
           .then(account => {
             this.users[index].account = account;
-            this.userAccounts.set(user._id.toString(), {account, date: new Date()});
+            this.userAccounts.set(user._id.toString(), { account, date: new Date() });
           });
       }
-
-      // Append account
-      user.account = userAccount.account;
-      return null;
     }).filter(a => a);
 
     // Append user positions
@@ -129,7 +107,7 @@ class Engine {
 
     // Append rule orders by refId
     const orderPromises = this.rules[frequency].map((rule, index) => {
-      const user = this.users.find(({_id}) => rule.user._id.equals(_id));
+      const user = this.users.find(({ _id }) => rule.user._id.equals(_id));
       return this.getRuleOrders(user, rule)
         .then((orders = []) => {
           if (orders.length) {
@@ -144,7 +122,7 @@ class Engine {
 
   async processFeeds(frequency) {
     try {
-      const {isExtendedClosedNow, secondsLeftToExtendedMarketClosed, isClosedNow, secondsLeftToMarketClosed} = await rh.getMarketHours();
+      const { isExtendedClosedNow, secondsLeftToExtendedMarketClosed, isClosedNow, secondsLeftToMarketClosed } = this.marketHours;
       const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
       const secondsToMarketClosed = ENABLE_EXTENDED_HOURS ? secondsLeftToExtendedMarketClosed : secondsLeftToMarketClosed;
       this.rules[frequency] = this.rules[frequency].filter(r => r.enabled && !this.orderPendingMap.has(r._id.toString()));
@@ -177,7 +155,7 @@ class Engine {
             const lastOrderId = get(trade, 'sellOrderId') || get(trade, 'buyOrderId');
             assert(lastOrderId, `Trade without sellOrderId or buyOrderId found. Id: ${trade._id}`);
 
-            let lastOrder = get(rule, 'orders', []).find(({id}) => id === lastOrderId);
+            let lastOrder = get(rule, 'orders', []).find(({ id }) => id === lastOrderId);
             if (!lastOrder) {
               // Get fresh rule orders
               [rule.orders, lastOrder] = await Promise.all([
@@ -278,9 +256,9 @@ class Engine {
             numberOfShares = get(rule, 'numberOfShares');
           }
 
-          const {symbol, holdOvernight} = rule;
+          const { symbol, holdOvernight } = rule;
           const price = quote.close;
-          const metadata = {...rule.toObject(), ...user, ...quote};
+          const metadata = { ...rule.toObject(), ...user, ...quote };
           const buyQuery = new Query(parsePattern(get(rule, 'strategy.in.query'), metadata, false));
           const sellQuery = new Query(parsePattern(get(rule, 'strategy.out.query'), metadata, true));
           assert(buyQuery.__criteria || sellQuery.__criteria, `No strategy found for rule ${rule._id}`);
@@ -289,7 +267,7 @@ class Engine {
           const profitValue = get(trade, 'profitValue', null);
           const riskPriceReached = riskValue > price;
           const profitPriceReached = profitValue && profitValue < price;
-          const commonOptions = {user, symbol, price, numberOfShares, rule, trade};
+          const commonOptions = { user, symbol, price, numberOfShares, rule, trade };
 
           /**
            * End of day is approaching (4PM EST), sell all shares in the last 30sec if rule is not holding overnight
@@ -343,8 +321,8 @@ class Engine {
           else if (lastOrderIsBuy && get(trade, 'buyPrice') && rule.limits.followPrice.enabled) {
             const buyPrice = get(trade, 'buyPrice');
             const realizedGainPerc = ((price - buyPrice) / buyPrice) * 100;
-            const {riskPercentage, followPrice} = rule.limits;
-            const {targetPercentage, riskPercentageAfterTargetReached} = followPrice;
+            const { riskPercentage, followPrice } = rule.limits;
+            const { targetPercentage, riskPercentageAfterTargetReached } = followPrice;
 
             if (!trade.targetReached && targetPercentage <= realizedGainPerc) {
               trade.targetReached = true;
@@ -418,7 +396,7 @@ class Engine {
     if (get(lastOrder, 'state') !== 'filled' && get(lastOrder, 'cancel')) {
       return rh.postWithAuth(user, lastOrder.cancel)
         .then(json => {
-          logger.orderCanceled({...lastOrder, symbol, name, json});
+          logger.orderCanceled({ ...lastOrder, symbol, name, json });
           return true;
         })
         .catch(() => false);
@@ -439,7 +417,7 @@ class Engine {
    * @param trade
    * @returns {Promise}
    */
-  async placeOrder({side, user, symbol, price, numberOfShares, rule, name, trade}) {
+  async placeOrder({ side, user, symbol, price, numberOfShares, rule, name, trade }) {
     const ruleId = rule._id.toString();
     if (!ruleId || this.orderPendingMap.has(ruleId)) {
       return;
@@ -467,14 +445,14 @@ class Engine {
       override_day_trade_checks: rule.overrideDayTradeChecks,
       ref_id: rule.UUID()
     };
-    const promise =  rh.placeOrder(user, options)
+    const promise = rh.placeOrder(user, options)
       .then(order => {
-        logger.orderPlaced({symbol, price, ...order, name});
+        logger.orderPlaced({ symbol, price, ...order, name });
 
         // Update order id on trade
         if (side === 'buy') {
           if (!trade) {
-            trade = new Trade({rule: ruleId, user: user._id.toString()});
+            trade = new Trade({ rule: ruleId, user: user._id.toString() });
           }
           trade.buyOrderId = order.id;
         } else {
@@ -508,7 +486,7 @@ class Engine {
         }
 
         this.orderPendingMap.delete(ruleId);
-        logger.error({message: `Failed to place order for rule ${name}. ${error.message}`});
+        logger.error({ message: `Failed to place order for rule ${name}. ${error.message}` });
       });
 
     this.orderPendingMap.set(ruleId, promise);
@@ -537,13 +515,41 @@ class Engine {
   }
 
   /**
+   * RH Tokens now expire in 86.4s, therefore this function will refresh it before
+   * they expire
+   */
+  async populateAuthTokens() {
+    const { isExtendedClosedNow, isClosedNow } = this.marketHours;
+    const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
+
+    if (!OVERRIDE_MARKET_CLOSE && isClosedNow && isMarketClosed) {
+      return;
+    }
+
+    if (!this.users.length) {
+      this.users = (await User.find().lean()).map(idToString);
+    }
+
+    await Promise.all(this.users.map((user, index) => rh.auth(user.brokerConfig)
+      .then(token => this.users[index].token = token)));
+  }
+
+  /**
+   * Populates the engine with current market hours
+   * @returns {Promise<void>}
+   */
+  async populateMarketHours() {
+    this.marketHours = await rh.getMarketHours();
+  }
+
+  /**
    * Ping only when market is open or every half an our when market is closed
    * @returns {Promise<void>}
    */
   async ping() {
     if (ENV === 'production') {
       setInterval(async () => {
-        const {isExtendedClosedNow, isClosedNow} = await rh.getMarketHours();
+        const { isExtendedClosedNow, isClosedNow } = this.marketHours;
         const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
         if (!isMarketClosed || moment().minutes() % 30 === 0) {
           logger.ping();

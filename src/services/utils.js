@@ -95,27 +95,14 @@ const parsePattern = (pattern = null, object, doNotMatchIfNull) => {
     let result = pattern;
     Object.keys(object).forEach(key => {
       if (result.includes(`{{${key}}}`)) {
-          const toBeReplaced = isNumber(object[key]) ? `"{{${key}}}"` : `{{${key}}}`;
-          result = result.replace(toBeReplaced, object[key]);
+        const toBeReplaced = isNumber(object[key]) ? `"{{${key}}}"` : `{{${key}}}`;
+        result = result.replace(toBeReplaced, object[key]);
       }
     });
     return JSON.parse(result);
   }
 
   return JSON.parse(pattern);
-};
-
-/**
- * Basic JSON formatter
- * @param json
- * @param spaces
- * @returns {string}
- */
-const formatJSON = (json = {}, spaces = 2) => {
-  const withStringify = JSON.stringify(json, null, spaces);
-  const withToString = json.toString ? json.toString() : '';
-
-  return withStringify !== '{}' ? withStringify : withToString;
 };
 
 /**
@@ -135,6 +122,11 @@ const assert = (object, message, shouldLog = false) => {
 };
 
 /**
+ * Converts _id prop into string
+ */
+const idToString = (object) => ({ ...object, _id: object._id.toString() });
+
+/**
  * Time Constants
  * @type {number}
  */
@@ -142,6 +134,7 @@ const ONE_SECOND = 1000;
 const FIVE_SECONDS = ONE_SECOND * 5;
 const TEN_SECONDS = ONE_SECOND * 10;
 const ONE_MINUTE = ONE_SECOND * 60;
+const ONE_AND_A_HALF_MINUTES = ONE_SECOND * 90;
 const TEN_MINUTES = ONE_MINUTE * 10;
 const ONE_HOUR = ONE_MINUTE * 60;
 const FIVE_HOURS = ONE_HOUR * 5;
@@ -153,8 +146,8 @@ module.exports = {
   decrypt,
   parsePattern,
   assert,
-  formatJSON,
   isMarketTimesLoaded,
+  idToString,
   ONE_SECOND,
   FIVE_SECONDS,
   TEN_SECONDS,
@@ -162,4 +155,5 @@ module.exports = {
   TEN_MINUTES,
   ONE_HOUR,
   FIVE_HOURS,
+  ONE_AND_A_HALF_MINUTES,
 };
