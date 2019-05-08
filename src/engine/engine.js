@@ -41,8 +41,6 @@ class Engine {
     try {
       await this.populateMarketHours();
       await this.populateAuthTokens();
-      await this.loadRulesAndAccounts(FIVE_SECONDS);
-      await this.loadRulesAndAccounts(ONE_MINUTE);
       await this.detectIntervalChange();
 
       setInterval(() => this.populateMarketHours(), FIVE_SECONDS);
@@ -68,11 +66,11 @@ class Engine {
    * - Get fresh user orders
    * @returns {Promise<void>}
    */
-  async loadRulesAndAccounts(frequency) {
+  async loadRulesAndAccounts(frequency, overrideMarketClosed = OVERRIDE_MARKET_CLOSE) {
     const { isExtendedClosedNow, isClosedNow } = this.marketHours;
     const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
 
-    if (!OVERRIDE_MARKET_CLOSE && isClosedNow && isMarketClosed) {
+    if (!overrideMarketClosed && isClosedNow && isMarketClosed) {
       return;
     }
 
@@ -138,7 +136,8 @@ class Engine {
 
       rules.forEach(async (rule, ruleIndex) => {
         try {
-          const user = this.users.find(u => rule.user._id.equals(u._id));
+          const userId = rule.user._id.toString();
+          const user = this.users.find(u => userId === u._id);
           assert(user, `User ${rule.user._id} not found in rule ${rule._id}`);
 
           const quote = quotes.find(q => q.symbol === `${rule.exchange}:${rule.symbol}`);
@@ -519,19 +518,25 @@ class Engine {
    * they expire
    */
   async populateAuthTokens() {
-    const { isExtendedClosedNow, isClosedNow } = this.marketHours;
-    const isMarketClosed = ENABLE_EXTENDED_HOURS ? isExtendedClosedNow : isClosedNow;
+    const { isExtendedClosedNow } = this.marketHours;
+    const init = !this.users.length;
 
-    if (!OVERRIDE_MARKET_CLOSE && isClosedNow && isMarketClosed) {
+    if (!OVERRIDE_MARKET_CLOSE && isExtendedClosedNow) {
       return;
     }
 
-    if (!this.users.length) {
+    if (init) {
       this.users = (await User.find().lean()).map(idToString);
     }
 
     await Promise.all(this.users.map((user, index) => rh.auth(user.brokerConfig)
-      .then(token => this.users[index].token = token)));
+      .then(token => this.users[index].token = token)))
+      .then(async () => {
+        if (init) {
+          await this.loadRulesAndAccounts(FIVE_SECONDS, true);
+          return this.loadRulesAndAccounts(ONE_MINUTE, true);
+        }
+      });
   }
 
   /**
